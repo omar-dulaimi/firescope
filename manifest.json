@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "FireScope",
+  "version": "1.2.0",
+  "description": "Real-time Firestore monitor in DevTools with readable query details and export (Angular/Node/Flutter/JSON).",
+  "permissions": ["webRequest"],
+  "devtools_page": "src/devtools.html",
+  "host_permissions": [
+    "https://firestore.googleapis.com/*",
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "minimum_chrome_version": "88",
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  }
+}

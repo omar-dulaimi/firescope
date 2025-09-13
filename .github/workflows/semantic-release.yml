@@ -1,0 +1,71 @@
+name: Semantic Release
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [closed]
+    branches:
+      - master
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    if: |
+      github.event_name == 'push' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.merged == true)
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Ensure tags are available
+        run: git fetch --tags --force
+
+      - name: Sync with origin/master
+        run: |
+          git fetch origin master --force --tags
+          git checkout master
+          git reset --hard origin/master
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Semantic Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm run release
+
+      - name: Build both editions and zip (post-release bump)
+        run: pnpm run build:both
+
+      - name: Read release tag
+        id: get_tag
+        run: |
+          echo "tag=v$(node -e "console.log(JSON.parse(require('fs').readFileSync('package.json','utf8')).version)")" >> $GITHUB_OUTPUT
+
+      - name: Upload zips to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_tag.outputs.tag }}
+          files: |
+            firescope.zip
+            firescope-pro.zip

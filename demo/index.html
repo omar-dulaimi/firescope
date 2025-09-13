@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FireScope Demo - Firestore Query Generator</title>
+    <link rel="stylesheet" href="css/demo.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🔥 FireScope Demo</h1>
+        <p>
+          Generate realistic Firestore queries to showcase FireScope's
+          capabilities
+        </p>
+      </div>
+
+      <div class="content">
+        <div class="instructions">
+          <h3>📋 Recording Instructions</h3>
+          <ol>
+            <li>Open Chrome DevTools (F12)</li>
+            <li>Navigate to the <strong>FireScope</strong> tab</li>
+            <li>Click the demo buttons below to generate Firestore queries</li>
+            <li>
+              Watch as FireScope captures and displays each request in real-time
+            </li>
+            <li>
+              Use the "Auto Demo" for continuous query generation during
+              recordings
+            </li>
+          </ol>
+        </div>
+
+        <div id="status" class="status" style="display: none"></div>
+
+        <div class="controls">
+          <h3>⚙️ Demo Controls</h3>
+          <button class="btn" id="testConnectionBtn">📡 Test Connection</button>
+          <button class="btn" id="clearResultsBtn">🧹 Clear Results</button>
+        </div>
+
+        <div class="demo-grid">
+          <div class="demo-card">
+            <h3>👥 User Queries</h3>
+            <p>
+              Demonstrate simple and complex user filtering queries with various
+              conditions.
+            </p>
+            <button class="btn" id="runUserDemosBtn">Run User Demos</button>
+          </div>
+
+          <div class="demo-card">
+            <h3>📝 Content Queries</h3>
+            <p>
+              Show blog Posts, articles, and content management queries with
+              sorting and pagination.
+            </p>
+            <button class="btn" id="runContentDemosBtn">Run Content Demos</button>
+          </div>
+
+          <div class="demo-card">
+            <h3>🛍️ E-commerce Queries</h3>
+            <p>
+              Product searches, inventory checks, and shopping cart operations.
+            </p>
+            <button class="btn" id="runEcommerceDemosBtn">Run E-commerce Demos</button>
+          </div>
+
+          <div class="demo-card">
+            <h3>📊 Analytics Queries</h3>
+            <p>Time-series data, metrics aggregation, and reporting queries.</p>
+            <button class="btn" id="runAnalyticsDemosBtn">Run Analytics Demos</button>
+          </div>
+
+          <div class="demo-card">
+            <h3>🔍 Advanced Queries</h3>
+            <p>
+              Complex multi-collection queries, compound filters, and edge
+              cases.
+            </p>
+            <button class="btn" id="runAdvancedDemosBtn">Run Advanced Demos</button>
+          </div>
+
+          <div class="demo-card">
+            <h3>📄 Document Operations</h3>
+            <p>Single document reads, writes, and real-time updates.</p>
+            <button class="btn" id="runDocumentDemosBtn">Run Document Demos</button>
+          </div>
+
+          <div class="demo-card">
+            <h3>🧮 Aggregations</h3>
+            <p>Demonstrate count, sum, and average aggregations across collections.</p>
+            <button class="btn" id="runAggregationsBtn">Run Aggregation Demos</button>
+          </div>
+
+          <div class="demo-card">
+            <h3>🗂️ Collection Group Queries</h3>
+            <p>Query subcollection data across all parent documents.</p>
+            <button class="btn" id="runCollectionGroupDemosBtn">Run Collection Group Demos</button>
+          </div>
+        </div>
+
+        <div class="auto-demo">
+          <h3>🎬 Auto Demo Mode</h3>
+          <p>
+            Perfect for video recordings - automatically runs a sequence of
+            queries with delays
+          </p>
+          <button class="btn" id="startAutoDemoBtn" style="background: white; color: #333; font-weight: bold">▶️ Start Auto Demo Sequence</button>
+          <button class="btn" id="stopAutoDemoBtn" style="background: #ff4757; border: none">⏹️ Stop Auto Demo</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Load modular JavaScript -->
+    <script type="module" src="js/index.js"></script>
+  </body>
+</html>

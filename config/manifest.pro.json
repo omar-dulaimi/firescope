@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "FireScope Pro",
+  "version": "1.2.0",
+  "description": "FireScope Pro edition with Pro features (API key required for Console links).",
+  "permissions": ["webRequest", "storage"],
+  "devtools_page": "src/devtools.html",
+  "host_permissions": [
+    "https://firestore.googleapis.com/*",
+    "http://localhost:4567/*",
+    "https://*/*",
+    "http://*/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "src/options.html",
+    "open_in_tab": true
+  },
+  "minimum_chrome_version": "88",
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  }
+}

@@ -1,0 +1,746 @@
+/* Modern Theme Variables */
+:root {
+  /* Light Theme */
+  --bg-light: #ffffff;
+  --surface-light: #f8fafc;
+  --surface-elevated-light: #ffffff;
+  --text-light: #0f172a;
+  --text-muted-light: #64748b;
+  --border-light: #e2e8f0;
+  --border-subtle-light: #f1f5f9;
+  --accent-light: #3b82f6;
+  --success-light: #10b981;
+  --warning-light: #f59e0b;
+  --danger-light: #ef4444;
+  --code-bg-light: #f8fafc;
+
+  /* Dark Theme */
+  --bg-dark: #0f172a;
+  --surface-dark: #1e293b;
+  --surface-elevated-dark: #334155;
+  --text-dark: #f1f5f9;
+  --text-muted-dark: #94a3b8;
+  --border-dark: #475569;
+  --border-subtle-dark: #334155;
+  --accent-dark: #60a5fa;
+  --success-dark: #34d399;
+  --warning-dark: #fbbf24;
+  --danger-dark: #f87171;
+  --code-bg-dark: #0f172a;
+}
+
+/* Default to system preference */
+:root {
+  --bg: var(--bg-light);
+  --surface: var(--surface-light);
+  --surface-elevated: var(--surface-elevated-light);
+  --text: var(--text-light);
+  --text-muted: var(--text-muted-light);
+  --border: var(--border-light);
+  --border-subtle: var(--border-subtle-light);
+  --accent: var(--accent-light);
+  --success: var(--success-light);
+  --warning: var(--warning-light);
+  --danger: var(--danger-light);
+  --code-bg: var(--code-bg-light);
+
+  /* Modern shadows and effects */
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --blur: backdrop-filter: blur(8px);
+  --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark theme when system prefers dark */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: var(--bg-dark);
+    --surface: var(--surface-dark);
+    --surface-elevated: var(--surface-elevated-dark);
+    --text: var(--text-dark);
+    --text-muted: var(--text-muted-dark);
+    --border: var(--border-dark);
+    --border-subtle: var(--border-subtle-dark);
+    --accent: var(--accent-dark);
+    --success: var(--success-dark);
+    --warning: var(--warning-dark);
+    --danger: var(--danger-dark);
+    --code-bg: var(--code-bg-dark);
+
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --shadow-lg:
+      0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  }
+}
+
+/* Force dark theme class */
+[data-theme='dark'] {
+  --bg: var(--bg-dark);
+  --surface: var(--surface-dark);
+  --surface-elevated: var(--surface-elevated-dark);
+  --text: var(--text-dark);
+  --text-muted: var(--text-muted-dark);
+  --border: var(--border-dark);
+  --border-subtle: var(--border-subtle-dark);
+  --accent: var(--accent-dark);
+  --success: var(--success-dark);
+  --warning: var(--warning-dark);
+  --danger: var(--danger-dark);
+  --code-bg: var(--code-bg-dark);
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg:
+    0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+}
+
+/* Force light theme class */
+[data-theme='light'] {
+  --bg: var(--bg-light);
+  --surface: var(--surface-light);
+  --surface-elevated: var(--surface-elevated-light);
+  --text: var(--text-light);
+  --text-muted: var(--text-muted-light);
+  --border: var(--border-light);
+  --border-subtle: var(--border-subtle-light);
+  --accent: var(--accent-light);
+  --success: var(--success-light);
+  --warning: var(--warning-light);
+  --danger: var(--danger-light);
+  --code-bg: var(--code-bg-light);
+}
+/* Modern Base Styles */
+* {
+  box-sizing: border-box;
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    sans-serif;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  transition: var(--transition);
+}
+
+/* Responsive Modern Toolbar */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-subtle);
+  gap: 8px 12px; /* row-gap column-gap */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+  box-shadow: var(--shadow-sm);
+  overflow: visible; /* Ensure dropdowns aren't clipped */
+}
+
+.toolbar .left,
+.toolbar .right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto; /* Don't grow/shrink the containers themselves */
+}
+
+.toolbar .left {
+  order: 1;
+  flex: 1 1 auto; /* Allow left section to grow and take available space */
+  min-width: 0; /* Allow shrinking below content size */
+}
+
+.toolbar .right {
+  order: 2;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+/* Icon button (GitHub) */
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+  transition: var(--transition);
+  text-decoration: none;
+}
+
+/* Ensure inline SVGs aren't baseline-clipped inside buttons */
+.icon-btn svg {
+  display: block;
+  width: 24px;
+  height: 24px;
+  overflow: visible;
+}
+
+.icon-btn:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px) scale(1.05);
+  box-shadow: var(--shadow);
+}
+
+.icon-btn.gh svg {
+  display: block;
+}
+
+/* More button visually clear */
+.more-btn {
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow:
+    var(--shadow-sm),
+    0 0 0 1px var(--border) inset;
+}
+.more-btn:hover {
+  border-color: var(--accent);
+  box-shadow:
+    var(--shadow),
+    0 0 0 1px var(--accent) inset;
+}
+
+/* Search Container */
+.search-container {
+  position: relative;
+  flex: 1 1 200px; /* Grow/shrink with min-width of 200px */
+  max-width: 400px; /* Don't get too wide on large screens */
+  min-width: 180px; /* Minimum usable width */
+}
+
+/* Responsive Modern Search Input */
+#search {
+  width: 100%;
+  padding: 8px 12px;
+  padding-right: 40px; /* Space for clear button */
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-size: 14px;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Search Clear Button */
+.search-clear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  box-shadow: none;
+}
+
+.search-clear:hover {
+  background: var(--surface);
+  color: var(--text);
+  transform: translateY(-50%) scale(1.1);
+}
+
+/* Responsive breakpoints for toolbar */
+@media (max-width: 768px) {
+  .toolbar {
+    padding: 10px 12px;
+    gap: 6px 10px;
+  }
+
+  .toolbar .left,
+  .toolbar .right {
+    gap: 10px;
+  }
+
+  .search-container {
+    flex: 1 1 160px;
+    min-width: 160px;
+    max-width: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .toolbar {
+    padding: 8px 10px;
+    gap: 6px 8px;
+  }
+
+  .toolbar .left,
+  .toolbar .right {
+    gap: 8px;
+  }
+
+  .search-container {
+    flex: 1 1 140px;
+    min-width: 140px;
+  }
+
+  /* Ensure right section wraps on very small screens */
+  .toolbar .right {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+}
+
+#search:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgb(59 130 246 / 0.1);
+}
+
+/* Modern Buttons */
+button {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+  color: var(--text);
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: 500;
+  font-size: 14px;
+  transition: var(--transition);
+  box-shadow: var(--shadow-sm);
+}
+
+button:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+/* Sponsor Link - Enhanced Prominent Style */
+a.sponsor {
+  padding: 10px 18px;
+  border: none;
+  border-radius: 12px;
+  text-decoration: none;
+  color: white;
+  font-weight: 600;
+  font-size: 14px;
+  transition: var(--transition);
+  background: linear-gradient(135deg, #8b5cf6 0%, #a855f7 50%, #c084fc 100%);
+  box-shadow: 0 4px 12px rgb(139 92 246 / 0.3);
+  position: relative;
+  overflow: hidden;
+}
+
+a.sponsor::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  transition: left 0.5s;
+}
+
+a.sponsor:hover::before {
+  left: 100%;
+}
+
+a.sponsor:hover {
+  background: linear-gradient(135deg, #7c3aed 0%, #9333ea 50%, #a855f7 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgb(139 92 246 / 0.4);
+}
+
+a.sponsor:active {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgb(139 92 246 / 0.3);
+}
+
+/* Main Content */
+main {
+  padding: 16px;
+}
+
+#requests {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Modern Request Cards */
+.request {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  transition: var(--transition);
+}
+
+.request:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+}
+
+
+/* Summary area now stacks stats above the main row */
+.summary {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+}
+
+/* Second row: verb/collection on left, actions on right */
+.summary .row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.summary .line {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Grouped stats container shown above the row */
+.summary .meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Chips row listing each query in a grouped request */
+.summary .query-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px; /* add space to match single-query layout */
+}
+.summary .query-chips .query-chip {
+  /* Inherit .badge + type-* styling to match single-query chips */
+  padding: 4px 8px;
+  border-radius: 20px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+/* Improve collection name presentation */
+.collection {
+  color: var(--text);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  line-height: 1.2; /* Improve readability for collection/id labels */
+}
+
+/* Generic pill style for compact stats */
+.summary .meta .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Pill icon alignment */
+.summary .meta .pill .pill-icon {
+  display: inline-flex;
+  align-items: center;
+}
+
+.summary .meta .duration {
+  color: var(--text-muted);
+}
+
+/* Method pill inherits verb color, with pill shape */
+.summary .meta .method {
+  font-weight: 600;
+}
+
+/* Light/dark toned backgrounds for key pills */
+.summary .meta .method {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: rgba(59, 130, 246, 0.35);
+  color: var(--accent);
+}
+
+.summary .meta .count {
+  background: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: var(--text-muted);
+}
+
+.summary .meta .time {
+  background: rgba(148, 163, 184, 0.12);
+  border-color: rgba(148, 163, 184, 0.3);
+  color: var(--text-muted);
+}
+
+.method {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.collection {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.duration {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.status {
+  padding: 4px 8px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Export button styling (dropdown handled via portal) */
+.exportBtn {
+  /* No special styling needed - uses standard button styles */
+}
+
+/* Modern Details Panel */
+.details {
+  display: none;
+  padding: 16px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
+.details.show {
+  display: block;
+}
+
+.code {
+  white-space: pre-wrap;
+  background: var(--code-bg);
+  border: 1px solid var(--border-subtle);
+  padding: 16px;
+  border-radius: 12px;
+  overflow: auto;
+  font-family:
+    'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New',
+    monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Modern Popover */
+.popover {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px); /* Position below the button with small gap */
+  background: var(--surface-elevated);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 240px;
+  padding: 12px;
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(8px);
+  z-index: 50; /* Ensure it appears above other elements */
+}
+
+.popover.visible {
+  display: block;
+}
+
+/* Ensure collections button container doesn't clip dropdown */
+.collections {
+  position: relative;
+  z-index: 25;
+}
+
+/* Responsive adjustments for narrow screens */
+@media (max-width: 480px) {
+  .popover {
+    /* On very small screens, position dropdown from left edge instead of right */
+    right: auto;
+    left: 0;
+    min-width: 200px;
+  }
+}
+
+.chevron {
+  opacity: 0.6;
+  transition: var(--transition);
+}
+
+.chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Modern Badges */
+.badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  margin: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--surface);
+  transition: var(--transition);
+}
+.badge .badge-icon { display: inline-flex; align-items: center; margin-right: 6px; }
+
+.badge:hover {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+#empty {
+  color: var(--text-muted);
+  padding: 32px;
+  text-align: center;
+  font-size: 16px;
+}
+
+/* Type badge variants */
+.badge.type-aggregation { background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.3); color: var(--success); }
+.badge.type-lookup { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); color: var(--accent); }
+.badge.type-write { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); color: var(--warning); }
+.badge.type-fetch { background: rgba(148,163,184,0.15); border-color: rgba(148,163,184,0.35); color: var(--text-muted); }
+.badge.type-group { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.35); color: var(--accent); }
+
+/* Aggregations summary */
+.agg-summary { 
+  margin: 8px 0 12px; 
+  padding: 8px 10px; 
+  background: var(--surface); 
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px; 
+}
+.agg-title { font-weight: 600; color: var(--text); margin-bottom: 6px; }
+.agg-list { list-style: none; margin: 0; padding: 0; }
+.agg-item { font-size: 12px; color: var(--text-muted); padding: 2px 0; }
+
+/* Per-subquery header layout: badges left, actions right */
+.query-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.query-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.query-detail-header .sub-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* Theme Toggle Button */
+#themeToggle {
+  min-width: 40px;
+  padding: 8px;
+  font-size: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-elevated);
+  transition: var(--transition);
+}
+
+#themeToggle:hover {
+  background: var(--accent);
+  transform: rotate(15deg) scale(1.1);
+}
+
+/* Status colors for different states */
+.status.success {
+  background: rgb(16 185 129 / 0.1);
+  color: var(--success);
+  border-color: var(--success);
+}
+
+.status.error {
+  background: rgb(239 68 68 / 0.1);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.status.warning {
+  background: rgb(245 158 11 / 0.1);
+  color: var(--warning);
+  border-color: var(--warning);
+}
+
+/* Enhanced request method colors */
+.method.POST {
+  color: var(--success);
+}
+
+.method.GET {
+  color: var(--accent);
+}
+
+.method.PUT {
+  color: var(--warning);
+}
+
+.method.DELETE {
+  color: var(--danger);
+}

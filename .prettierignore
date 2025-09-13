@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Auto-generated files
+demo/firebase-env.js
+
+# Package files
+package-lock.json
+*.log
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,71 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>FireScope Pro Options</title>
+    <style>
+      body {
+        font-family:
+          system-ui,
+          -apple-system,
+          Segoe UI,
+          Roboto,
+          Ubuntu,
+          Cantarell,
+          Noto Sans,
+          Helvetica,
+          Arial,
+          sans-serif;
+        margin: 24px;
+      }
+      .row {
+        margin-bottom: 16px;
+      }
+      label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+      }
+      input[type='text'] {
+        width: 420px;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+      button {
+        padding: 8px 12px;
+        border: 1px solid #4285f4;
+        background: #4285f4;
+        color: #fff;
+        border-radius: 4px;
+        cursor: pointer;
+      }
+      .muted {
+        color: #666;
+        font-size: 12px;
+        margin-top: 6px;
+      }
+      .ok {
+        color: #0a7f2e;
+        margin-left: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>FireScope Pro</h1>
+    <div class="row">
+      <label for="apiKey">API Key</label>
+      <input
+        id="apiKey"
+        type="text"
+        placeholder="Enter your FireScope Pro API key"
+      />
+      <button id="save">Save</button>
+      <span id="status" class="ok" style="display: none">Saved</span>
+      <div class="muted">
+        Stored in chrome.storage.sync. Required for Pro features.
+      </div>
+    </div>
+    <script type="module" src="./js/options.js"></script>
+  </body>
+</html>
