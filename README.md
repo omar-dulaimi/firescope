@@ -41,28 +41,34 @@ Traditional Firestore debugging means digging through network tabs and decipheri
 ## ✨ Features
 
 ### 🔍 Real‑time Firestore Monitoring
+
 - Captures Firestore network calls as you develop.
 - Groups multiple queries in a single request under one card (Listen/channel).
 - Shared stats per request: method, duration, status, count.
 
 ### 🧭 Clear Query Types
+
 - Badges for FETCH, LOOKUP, WRITE, and AGG (aggregations).
 - Collection Group (CG) badge when applicable.
 - Doc lookups show paths like `Users/user_1` right in the summary.
 
 ### 📋 One‑click Code Export
+
 - Angular (AngularFire), Node.js (Admin SDK), Flutter (cloud_firestore), and JSON.
 - Works per request and per sub‑query in grouped requests.
 
 ### 🧩 Helpful Details (when you need them)
+
 - Compact, readable JSON with collapsible sections.
 - Aggregation summaries (COUNT/SUM/AVG) rendered per query.
 
 ### 🗂️ Collection Filtering & Utilities
+
 - Filter by collection via search (Ctrl/Cmd+F) or the Collections menu.
 - Export all visible requests, or clear the list quickly.
 
 ### 🎛️ Nice UX Touches
+
 - Light/Dark/System themes (More menu).
 - Non‑clipping dropdowns (portal) and keyboard-friendly search.
 - Pro (optional): “View in Console” deep‑links queries/documents to Firebase Console.
@@ -77,12 +83,12 @@ Traditional Firestore debugging means digging through network tabs and decipheri
 | :-----------------------------------------: | :-----------------------------------------: | :-----------------------------------------: |
 | ![Screenshot 1](./assets/screenshots/1.png) | ![Screenshot 2](./assets/screenshots/2.png) | ![Screenshot 3](./assets/screenshots/3.png) |
 
-|                 Details View                |                 Code Export                 |                   More Menu                  |
+|                Details View                 |                 Code Export                 |                  More Menu                  |
 | :-----------------------------------------: | :-----------------------------------------: | :-----------------------------------------: |
 | ![Screenshot 4](./assets/screenshots/4.png) | ![Screenshot 6](./assets/screenshots/6.png) | ![Screenshot 7](./assets/screenshots/7.png) |
 
-|                    Themes                   |              Grouped Requests               |                    —                        |
-| :-----------------------------------------: | :-----------------------------------------: | :-----------------------------------------: |
+|                   Themes                    |              Grouped Requests               |               —                |
+| :-----------------------------------------: | :-----------------------------------------: | :----------------------------: |
 | ![Screenshot 8](./assets/screenshots/8.png) | ![Screenshot 9](./assets/screenshots/9.png) | _More screenshots coming soon_ |
 
 </div>
@@ -128,9 +134,9 @@ Traditional Firestore debugging means digging through network tabs and decipheri
 
 Setup (Pro)
 
-1) Install the Pro build (ZIP) or build locally.
-2) Open the extension Options page and paste your API key (stored in Chrome sync).
-3) Click “View in Console” in the panel to jump to Firebase Console.
+1. Install the Pro build (ZIP) or build locally.
+2. Open the extension Options page and paste your API key (stored in Chrome sync).
+3. Click “View in Console” in the panel to jump to Firebase Console.
 
 Build
 
@@ -226,13 +232,20 @@ pnpm run build:watch  # Auto-rebuild on changes
 
 #### Code Export Workflow
 
-1) Click any request → Export ▾ → choose your target.
+1. Click any request → Export ▾ → choose your target.
 
 Angular (AngularFire)
 
 ```ts
 // AngularFire example
-import { Firestore, collection, query, where, orderBy, getDocs } from '@angular/fire/firestore';
+import {
+  Firestore,
+  collection,
+  query,
+  where,
+  orderBy,
+  getDocs,
+} from '@angular/fire/firestore';
 
 const ref = collection(firestore, 'Users');
 let qRef = ref;

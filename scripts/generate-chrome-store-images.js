@@ -30,11 +30,17 @@ function parseArgs(argv) {
 }
 
 const args = parseArgs(process.argv);
-const outputFormat = (/^png$/i.test(args.format) ? 'png' : 'jpeg'); // default jpeg
+const outputFormat = /^png$/i.test(args.format) ? 'png' : 'jpeg'; // default jpeg
 const outputExt = outputFormat === 'jpeg' ? 'jpg' : 'png';
-const quality = Number.isFinite(Number(args.quality)) ? Number(args.quality) : (outputFormat === 'jpeg' ? 100 : 90);
+const quality = Number.isFinite(Number(args.quality))
+  ? Number(args.quality)
+  : outputFormat === 'jpeg'
+    ? 100
+    : 90;
 const useDarkBg = (args.bg || 'dark').toLowerCase() !== 'light';
-const bgColor = useDarkBg ? { r: 15, g: 23, b: 42, alpha: 1 } : { r: 255, g: 255, b: 255, alpha: 1 };
+const bgColor = useDarkBg
+  ? { r: 15, g: 23, b: 42, alpha: 1 }
+  : { r: 255, g: 255, b: 255, alpha: 1 };
 
 // Configuration
 const CONFIG = {

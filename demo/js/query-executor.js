@@ -13,7 +13,8 @@ async function executeQuery(name, queryFunction) {
     const count =
       (typeof result?.size === 'number' ? result.size : null) ??
       (Array.isArray(result?.docs) ? result.docs.length : null) ??
-      (typeof result?.data === 'function' && typeof result.data()?.count === 'number'
+      (typeof result?.data === 'function' &&
+      typeof result.data()?.count === 'number'
         ? result.data().count
         : 0);
     let details = '';

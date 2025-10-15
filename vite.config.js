@@ -11,7 +11,8 @@ export default defineConfig(({ mode }) => {
   const edition = env.EDITION || process.env.EDITION || 'free';
 
   // Pick manifest and sync version to package.json
-  const baseManifest = edition === 'pro' ? { ...manifestPro } : { ...manifestFree };
+  const baseManifest =
+    edition === 'pro' ? { ...manifestPro } : { ...manifestFree };
   baseManifest.version = pkg.version;
 
   return {

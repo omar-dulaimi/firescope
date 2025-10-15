@@ -59,15 +59,24 @@ describe('console-link-utils', () => {
     const urlDefaultParam =
       'https://firestore.googleapis.com/v1/projects/my-project/databases/(default)/documents?database=projects%2Fmy-project%2Fdatabases%2F(default)';
     const link = createFirestoreLink(urlDefaultParam, 'Posts', null, {
-      filters: [{ field: 'tags', op: 'ARRAY_CONTAINS', value: { stringValue: 'javascript' } }],
+      filters: [
+        {
+          field: 'tags',
+          op: 'ARRAY_CONTAINS',
+          value: { stringValue: 'javascript' },
+        },
+      ],
       orderBy: [{ field: '__name__', direction: 'ASCENDING' }],
     });
     expect(link).toContain('view=query-view');
-    expect(decodeURIComponent(link)).toMatch(/\|WH\|1\|4\/tags\|AC\|STR\|10\/javascript/);
+    expect(decodeURIComponent(link)).toMatch(
+      /\|WH\|1\|4\/tags\|AC\|STR\|10\/javascript/
+    );
   });
 
   it('encodes limit in query string', () => {
-    const url = 'https://firestore.googleapis.com/v1/projects/my-project/databases/(default)/documents?database=projects%2Fmy-project%2Fdatabases%2F(default)';
+    const url =
+      'https://firestore.googleapis.com/v1/projects/my-project/databases/(default)/documents?database=projects%2Fmy-project%2Fdatabases%2F(default)';
     const link = createFirestoreLink(url, 'Posts', null, {
       filters: [],
       orderBy: [{ field: '__name__', direction: 'ASCENDING' }],
