@@ -1,3 +1,11 @@
+# [1.4.0](https://github.com/omar-dulaimi/firescope/compare/v1.3.0...v1.4.0) (2025-10-15)
+
+
+### Features
+
+* **exporter:** add React and Next.js query-only exporters ([b66d642](https://github.com/omar-dulaimi/firescope/commit/b66d64238c865cb1c7902ae678e01abe63c9ab60))
+* **panel:** add React/Next export options ([57e5517](https://github.com/omar-dulaimi/firescope/commit/57e551765591c539d5066fa1380b5ecd449acec9))
+
 # [1.3.0](https://github.com/omar-dulaimi/firescope/compare/v1.2.0...v1.3.0) (2025-09-13)
 
 ### Features
