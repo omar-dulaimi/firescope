@@ -49,7 +49,11 @@ window.addEventListener('DOMContentLoaded', () => {
     const el = document.getElementById(id);
     if (!el) return;
     el.addEventListener('click', function () {
-      try { fn(this); } catch (e) { console.error(`Failed: ${id}`, e); }
+      try {
+        fn(this);
+      } catch (e) {
+        console.error(`Failed: ${id}`, e);
+      }
     });
   };
   bind('runUserDemosBtn', demoUserQueries);

@@ -416,7 +416,6 @@ main {
   transform: translateY(-2px);
 }
 
-
 /* Summary area now stacks stats above the main row */
 .summary {
   display: flex;
@@ -640,7 +639,11 @@ main {
   background: var(--surface);
   transition: var(--transition);
 }
-.badge .badge-icon { display: inline-flex; align-items: center; margin-right: 6px; }
+.badge .badge-icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+}
 
 .badge:hover {
   background: var(--accent);
@@ -656,23 +659,55 @@ main {
 }
 
 /* Type badge variants */
-.badge.type-aggregation { background: rgba(16,185,129,0.1); border-color: rgba(16,185,129,0.3); color: var(--success); }
-.badge.type-lookup { background: rgba(59,130,246,0.1); border-color: rgba(59,130,246,0.3); color: var(--accent); }
-.badge.type-write { background: rgba(245,158,11,0.1); border-color: rgba(245,158,11,0.3); color: var(--warning); }
-.badge.type-fetch { background: rgba(148,163,184,0.15); border-color: rgba(148,163,184,0.35); color: var(--text-muted); }
-.badge.type-group { background: rgba(99,102,241,0.12); border-color: rgba(99,102,241,0.35); color: var(--accent); }
+.badge.type-aggregation {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: var(--success);
+}
+.badge.type-lookup {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
+  color: var(--accent);
+}
+.badge.type-write {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--warning);
+}
+.badge.type-fetch {
+  background: rgba(148, 163, 184, 0.15);
+  border-color: rgba(148, 163, 184, 0.35);
+  color: var(--text-muted);
+}
+.badge.type-group {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: var(--accent);
+}
 
 /* Aggregations summary */
-.agg-summary { 
-  margin: 8px 0 12px; 
-  padding: 8px 10px; 
-  background: var(--surface); 
+.agg-summary {
+  margin: 8px 0 12px;
+  padding: 8px 10px;
+  background: var(--surface);
   border: 1px solid var(--border-subtle);
-  border-radius: 8px; 
+  border-radius: 8px;
 }
-.agg-title { font-weight: 600; color: var(--text); margin-bottom: 6px; }
-.agg-list { list-style: none; margin: 0; padding: 0; }
-.agg-item { font-size: 12px; color: var(--text-muted); padding: 2px 0; }
+.agg-title {
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.agg-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.agg-item {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 0;
+}
 
 /* Per-subquery header layout: badges left, actions right */
 .query-detail-header {

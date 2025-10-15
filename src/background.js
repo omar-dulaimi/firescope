@@ -101,7 +101,9 @@ function parseFirestoreFromFormData(formData) {
           const str = String(p);
           const idx = str.indexOf('/documents/');
           if (idx !== -1) {
-            const tail = decodeURIComponent(str.slice(idx + '/documents/'.length));
+            const tail = decodeURIComponent(
+              str.slice(idx + '/documents/'.length)
+            );
             const parts = tail.split('/');
             if (parts.length >= 2) {
               const docId = parts.pop();
@@ -133,11 +135,12 @@ function parseFirestoreFromFormData(formData) {
             }))
           : [];
         // Limit may be a number or object depending on wire format
-        const limit = (typeof sq.limit === 'number')
-          ? sq.limit
-          : (sq.limit && typeof sq.limit.value === 'number')
-            ? sq.limit.value
-            : null;
+        const limit =
+          typeof sq.limit === 'number'
+            ? sq.limit
+            : sq.limit && typeof sq.limit.value === 'number'
+              ? sq.limit.value
+              : null;
         const filters = [];
         const walk = node => {
           if (!node) return;
@@ -202,7 +205,10 @@ function parseFirestoreFromFormData(formData) {
             });
             return;
           }
-          if (node.compositeFilter && Array.isArray(node.compositeFilter.filters)) {
+          if (
+            node.compositeFilter &&
+            Array.isArray(node.compositeFilter.filters)
+          ) {
             node.compositeFilter.filters.forEach(walkAgg);
           }
         };
@@ -295,16 +301,24 @@ function parseFirestoreFromBody(bodyText, url) {
           });
           return;
         }
-        if (node.compositeFilter && Array.isArray(node.compositeFilter.filters)) {
+        if (
+          node.compositeFilter &&
+          Array.isArray(node.compositeFilter.filters)
+        ) {
           node.compositeFilter.filters.forEach(walkAgg);
         }
       };
       walkAgg(agg.structuredQuery?.where);
       data.filters = filters;
       data.orderBy = Array.isArray(agg.structuredQuery?.orderBy)
-        ? agg.structuredQuery.orderBy.map(o => ({ field: o.field?.fieldPath, dir: o.direction }))
+        ? agg.structuredQuery.orderBy.map(o => ({
+            field: o.field?.fieldPath,
+            dir: o.direction,
+          }))
         : [];
-      data.aggregations = Array.isArray(agg.aggregations) ? agg.aggregations : [];
+      data.aggregations = Array.isArray(agg.aggregations)
+        ? agg.aggregations
+        : [];
     } else {
       const m = url.match(/\/documents\/(.*?)(?:\?|$)/);
       if (m) data.collectionPath = decodeURIComponent(m[1]);

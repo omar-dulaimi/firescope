@@ -138,7 +138,12 @@ export function buildQueryString(
   // WHERE clauses
   filters.forEach(filter => {
     const mappedOp = mapOperator(filter.op);
-    debug('WHERE mapOperator', { field: filter.field, opIn: filter.op, opOut: mappedOp, value: filter.value });
+    debug('WHERE mapOperator', {
+      field: filter.field,
+      opIn: filter.op,
+      opOut: mappedOp,
+      value: filter.value,
+    });
     clauses.push({
       type: 0,
       propertyFilters: [
@@ -161,7 +166,8 @@ export function buildQueryString(
   });
 
   // Aggregations
-  const getFieldName = f => (f && typeof f === 'object' && f.fieldPath) ? f.fieldPath : f;
+  const getFieldName = f =>
+    f && typeof f === 'object' && f.fieldPath ? f.fieldPath : f;
   aggregations?.forEach(agg => {
     if (agg.count !== undefined) clauses.push({ type: 3 });
     if (agg.sum !== undefined) {
@@ -347,7 +353,10 @@ export function createFirestoreLink(
       debug('URL (group)', built);
       return built;
     } else {
-      const built = CONFIG.FIRESTORE_QUERY_URL.replace('{PROJECT_ID}', projectId)
+      const built = CONFIG.FIRESTORE_QUERY_URL.replace(
+        '{PROJECT_ID}',
+        projectId
+      )
         .replace('{DATABASE}', databaseId)
         .replace('{COLLECTION}', collection)
         .replace('{QUERY}', encodeURIComponent(queryString));

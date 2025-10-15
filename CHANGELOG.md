@@ -1,60 +1,52 @@
 # [1.3.0](https://github.com/omar-dulaimi/firescope/compare/v1.2.0...v1.3.0) (2025-09-13)
 
-
 ### Features
 
-* bump minor for 1.3.0 ([f7e2f7b](https://github.com/omar-dulaimi/firescope/commit/f7e2f7bad8bff5a91a343178467446fe72a18654))
+- bump minor for 1.3.0 ([f7e2f7b](https://github.com/omar-dulaimi/firescope/commit/f7e2f7bad8bff5a91a343178467446fe72a18654))
 
 # 1.0.0 (2025-09-13)
 
-
 ### Features
 
-* **init:** first release ([ccb8a4a](https://github.com/omar-dulaimi/firescope/commit/ccb8a4aea4eaf5395eef2518b649903c0ee0bfe7))
-* trigger minor release ([e82f678](https://github.com/omar-dulaimi/firescope/commit/e82f6781c13fedd7126d2670b795a6e2721fb9d1))
+- **init:** first release ([ccb8a4a](https://github.com/omar-dulaimi/firescope/commit/ccb8a4aea4eaf5395eef2518b649903c0ee0bfe7))
+- trigger minor release ([e82f678](https://github.com/omar-dulaimi/firescope/commit/e82f6781c13fedd7126d2670b795a6e2721fb9d1))
 
 # 1.0.0 (2025-09-13)
 
-
 ### Features
 
-* **init:** first release ([ccb8a4a](https://github.com/omar-dulaimi/firescope/commit/ccb8a4aea4eaf5395eef2518b649903c0ee0bfe7))
-* trigger minor release ([e82f678](https://github.com/omar-dulaimi/firescope/commit/e82f6781c13fedd7126d2670b795a6e2721fb9d1))
+- **init:** first release ([ccb8a4a](https://github.com/omar-dulaimi/firescope/commit/ccb8a4aea4eaf5395eef2518b649903c0ee0bfe7))
+- trigger minor release ([e82f678](https://github.com/omar-dulaimi/firescope/commit/e82f6781c13fedd7126d2670b795a6e2721fb9d1))
 
 # 1.0.0 (2025-09-13)
 
-
 ### Features
 
-* **init:** first release ([ccb8a4a](https://github.com/omar-dulaimi/firescope/commit/ccb8a4aea4eaf5395eef2518b649903c0ee0bfe7))
+- **init:** first release ([ccb8a4a](https://github.com/omar-dulaimi/firescope/commit/ccb8a4aea4eaf5395eef2518b649903c0ee0bfe7))
 
 # 1.0.0 (2025-09-13)
 
-
 ### Features
 
-* **init:** first release ([ccb8a4a](https://github.com/omar-dulaimi/firescope/commit/ccb8a4aea4eaf5395eef2518b649903c0ee0bfe7))
+- **init:** first release ([ccb8a4a](https://github.com/omar-dulaimi/firescope/commit/ccb8a4aea4eaf5395eef2518b649903c0ee0bfe7))
 
 # 1.0.0 (2025-09-13)
 
-
 ### Features
 
-* **init:** first release ([4b09830](https://github.com/omar-dulaimi/firescope/commit/4b098303aee1504e969da00bc83b5f8c7fd6b08d))
+- **init:** first release ([4b09830](https://github.com/omar-dulaimi/firescope/commit/4b098303aee1504e969da00bc83b5f8c7fd6b08d))
 
 ## [1.3.1](https://github.com/omar-dulaimi/firescope/compare/v1.3.0...v1.3.1) (2025-09-13)
 
-
 ### Bug Fixes
 
-* **init:** fix ([b22ba4c](https://github.com/omar-dulaimi/firescope/commit/b22ba4c0c46b4642a24a7500cc33f66557e394f7))
+- **init:** fix ([b22ba4c](https://github.com/omar-dulaimi/firescope/commit/b22ba4c0c46b4642a24a7500cc33f66557e394f7))
 
 # [1.3.0](https://github.com/omar-dulaimi/firescope/compare/v1.2.0...v1.3.0) (2025-09-13)
 
-
 ### Features
 
-* **init:** init ([9718223](https://github.com/omar-dulaimi/firescope/commit/9718223617b46768156da7775dfa91b239a158c4))
+- **init:** init ([9718223](https://github.com/omar-dulaimi/firescope/commit/9718223617b46768156da7775dfa91b239a158c4))
 
 # Changelog
 

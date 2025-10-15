@@ -119,7 +119,9 @@ function render() {
   for (const [key, arr] of grouped.entries()) {
     const keep = !state.filter
       ? true
-      : arr.some(r => (r.collectionPath || '').toLowerCase().includes(state.filter));
+      : arr.some(r =>
+          (r.collectionPath || '').toLowerCase().includes(state.filter)
+        );
     if (keep) items.push({ key, children: arr });
   }
 
@@ -138,7 +140,8 @@ function render() {
     const _requestsWithFs = state.requests.filter(
       r => r.url && r.url.includes('firestore.googleapis.com')
     );
-    const firebaseUrl = _requestsWithFs.length > 0 ? _requestsWithFs[0].url : null;
+    const firebaseUrl =
+      _requestsWithFs.length > 0 ? _requestsWithFs[0].url : null;
     const node = tpl.content.cloneNode(true);
     const methodEl = node.querySelector('.method');
     const collectionEl = node.querySelector('.collection');
@@ -185,7 +188,8 @@ function render() {
           ? paths.join(', ')
           : first.collectionPath || '(unknown collection)';
       } else {
-        collectionEl.textContent = first.collectionPath || '(unknown collection)';
+        collectionEl.textContent =
+          first.collectionPath || '(unknown collection)';
       }
     }
     // Build grouped stats above the line
@@ -215,14 +219,13 @@ function render() {
           else if (s >= 400 && s < 500) statusClass = 'status error';
           else if (s >= 300 && s < 400) statusClass = 'status warning';
         }
-        const statusIcon =
-          statusClass.includes('success')
-            ? '✅'
-            : statusClass.includes('warning')
-              ? '⚠️'
-              : statusClass.includes('error')
-                ? '❌'
-                : 'ⓘ';
+        const statusIcon = statusClass.includes('success')
+          ? '✅'
+          : statusClass.includes('warning')
+            ? '⚠️'
+            : statusClass.includes('error')
+              ? '❌'
+              : 'ⓘ';
         statusEl.className = `${statusClass} pill`;
         statusEl.innerHTML = `<span class="pill-icon">${statusIcon}</span>${String(first.status)}`;
         metaEl.appendChild(statusEl);
@@ -246,7 +249,11 @@ function render() {
           const chip = document.createElement('span');
           chip.className = `query-chip badge ${getTypeBadgeClass(q.type)}`;
           let label = q.collectionPath || 'unknown';
-          if ((q.type === 'doc_lookup' || q.type === 'document_lookup') && Array.isArray(q.documents) && q.documents.length > 0) {
+          if (
+            (q.type === 'doc_lookup' || q.type === 'document_lookup') &&
+            Array.isArray(q.documents) &&
+            q.documents.length > 0
+          ) {
             const paths = q.documents
               .filter(d => d && d.collection && d.id)
               .map(d => `${d.collection}/${d.id}`);
@@ -283,7 +290,9 @@ function render() {
           const paths = q.documents
             .filter(d => d && d.collection && d.id)
             .map(d => `${d.collection}/${d.id}`);
-          name.textContent = paths.length ? paths.join(', ') : q.collectionPath || '(unknown collection)';
+          name.textContent = paths.length
+            ? paths.join(', ')
+            : q.collectionPath || '(unknown collection)';
         } else {
           name.textContent = q.collectionPath || '(unknown collection)';
         }
@@ -365,7 +374,9 @@ function render() {
             filters: q.filters || [],
             orderBy: q.orderBy || [],
             limit: typeof q.limit === 'number' ? q.limit : undefined,
-            aggregations: Array.isArray(q.aggregations) ? q.aggregations : undefined,
+            aggregations: Array.isArray(q.aggregations)
+              ? q.aggregations
+              : undefined,
             documents: Array.isArray(q.documents) ? q.documents : undefined,
           },
           null,
@@ -378,10 +389,42 @@ function render() {
         subExport.addEventListener('click', e => {
           e.stopPropagation();
           const menuItems = [
-            { text: 'Copy as Angular', value: 'angular', onClick: () => { const code = QueryExporter.toAngular(q); copy(code); toast('Copied Angular code'); } },
-            { text: 'Copy as Node.js', value: 'node', onClick: () => { const code = QueryExporter.toNode(q); copy(code); toast('Copied Node.js code'); } },
-            { text: 'Copy as Flutter', value: 'flutter', onClick: () => { const code = QueryExporter.toFlutter(q); copy(code); toast('Copied Flutter code'); } },
-            { text: 'Copy as JSON', value: 'json', onClick: () => { const code = QueryExporter.toJSON(q); copy(code); toast('Copied JSON'); } },
+            {
+              text: 'Copy as Angular',
+              value: 'angular',
+              onClick: () => {
+                const code = QueryExporter.toAngular(q);
+                copy(code);
+                toast('Copied Angular code');
+              },
+            },
+            {
+              text: 'Copy as Node.js',
+              value: 'node',
+              onClick: () => {
+                const code = QueryExporter.toNode(q);
+                copy(code);
+                toast('Copied Node.js code');
+              },
+            },
+            {
+              text: 'Copy as Flutter',
+              value: 'flutter',
+              onClick: () => {
+                const code = QueryExporter.toFlutter(q);
+                copy(code);
+                toast('Copied Flutter code');
+              },
+            },
+            {
+              text: 'Copy as JSON',
+              value: 'json',
+              onClick: () => {
+                const code = QueryExporter.toJSON(q);
+                copy(code);
+                toast('Copied JSON');
+              },
+            },
           ];
           dropdownPortal.openDropdown(subExport, menuItems);
         });
@@ -463,8 +506,12 @@ function render() {
           filters: first.filters || [],
           orderBy: first.orderBy || [],
           limit: typeof first.limit === 'number' ? first.limit : undefined,
-          aggregations: Array.isArray(first.aggregations) ? first.aggregations : undefined,
-          documents: Array.isArray(first.documents) ? first.documents : undefined,
+          aggregations: Array.isArray(first.aggregations)
+            ? first.aggregations
+            : undefined,
+          documents: Array.isArray(first.documents)
+            ? first.documents
+            : undefined,
         },
         null,
         2
@@ -502,12 +549,39 @@ function render() {
             },
           },
           {
+            text: 'Copy as React',
+            value: 'react',
+            onClick: () => {
+              const code = QueryExporter.toReact(currentForExport);
+              copy(code);
+              toast('Copied React code');
+            },
+          },
+          {
             text: 'Copy as Node.js',
             value: 'node',
             onClick: () => {
               const code = QueryExporter.toNode(currentForExport);
               copy(code);
               toast('Copied Node.js code');
+            },
+          },
+          {
+            text: 'Copy as Next.js (Client)',
+            value: 'next-client',
+            onClick: () => {
+              const code = QueryExporter.toNextClient(currentForExport);
+              copy(code);
+              toast('Copied Next.js client code');
+            },
+          },
+          {
+            text: 'Copy as Next.js (Server)',
+            value: 'next-server',
+            onClick: () => {
+              const code = QueryExporter.toNextServer(currentForExport);
+              copy(code);
+              toast('Copied Next.js server code');
             },
           },
           {
@@ -544,7 +618,10 @@ function render() {
         } else {
           navButton = createPanelNavButton(firebaseUrl, first);
         }
-        if (navButton && (navButton.tagName === 'BUTTON' || navButton.childNodes.length)) {
+        if (
+          navButton &&
+          (navButton.tagName === 'BUTTON' || navButton.childNodes.length)
+        ) {
           actionsDiv.appendChild(navButton);
         }
       }
@@ -711,7 +788,11 @@ function setupMessageListener() {
       const annotated = {
         ...msg.payload,
         receivedAt: now,
-        startedAt: hasStart ? msg.payload.startedAt : duration ? now - duration : null,
+        startedAt: hasStart
+          ? msg.payload.startedAt
+          : duration
+            ? now - duration
+            : null,
         endedAt: hasEnd ? msg.payload.endedAt : duration ? now : null,
       };
       state.requests.push(annotated);
@@ -812,8 +893,8 @@ function getTypeBadgeTooltip(type) {
       return 'Structured query (fetch)';
   }
 }
-    // Resolve Firebase Console URL base from any captured request
-    const requestsWithFs = state.requests.filter(
-      r => r.url && r.url.includes('firestore.googleapis.com')
-    );
-    const firebaseUrl = requestsWithFs.length > 0 ? requestsWithFs[0].url : null;
+// Resolve Firebase Console URL base from any captured request
+const requestsWithFs = state.requests.filter(
+  r => r.url && r.url.includes('firestore.googleapis.com')
+);
+const firebaseUrl = requestsWithFs.length > 0 ? requestsWithFs[0].url : null;

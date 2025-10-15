@@ -117,7 +117,7 @@ export async function demoContentQueries(button) {
         avgViews: average('stats.views'),
       });
     });
-    
+
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     // Query 2: Posts by category
@@ -193,7 +193,7 @@ export async function demoEcommerceQueries(button) {
         avgTotal: average('total'),
       });
     });
-    
+
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     // Query 2: Products by price range
@@ -264,7 +264,7 @@ export async function demoAnalyticsQueries(button) {
         avgPageViews: average('metrics.pageViews'),
       });
     });
-    
+
     await new Promise(resolve => setTimeout(resolve, 1500));
     // Query 2: High traffic days
     await executeQuery('High Traffic Analytics Query', async () => {
@@ -493,7 +493,7 @@ export async function startAutoDemo() {
     demoDocumentOperations,
     demoAdvancedQueries,
     demoAnalyticsQueries,
-    demoAggregations
+    demoAggregations,
   ];
 
   let currentIndex = 0;

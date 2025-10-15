@@ -145,7 +145,13 @@ async function seedUsers(count = 50) {
       verified: true,
       role: 'user',
       company: randomChoice(companies),
-      department: randomChoice(['Engineering', 'Marketing', 'Sales', 'Support', 'HR']),
+      department: randomChoice([
+        'Engineering',
+        'Marketing',
+        'Sales',
+        'Support',
+        'HR',
+      ]),
       age: randomNumber(22, 65),
       joinedAt: getRandomTimestamp(365),
       lastLogin: getRandomTimestamp(7),
@@ -274,7 +280,11 @@ async function seedPosts(count = 100) {
       updatedAt: getRandomTimestamp(30),
       publishedAt: getRandomTimestamp(60),
       stats: { views: 10, likes: 1, shares: 0, Comments: 0 },
-      seo: { metaTitle: 'SEO Title (fixed)', metaDescription: 'SEO description (fixed)', slug: 'fixed-post-1' },
+      seo: {
+        metaTitle: 'SEO Title (fixed)',
+        metaDescription: 'SEO description (fixed)',
+        slug: 'fixed-post-1',
+      },
     };
     batch.set(postRef, postData);
     seededPostIds.push(postRef.id);
@@ -391,12 +401,21 @@ async function seedProducts(count = 30) {
 
   // Ensure a predictable product for doc lookup demos
   {
-    const productRef = doc(collection(db, demoConfig.collections.Products), 'product_1');
+    const productRef = doc(
+      collection(db, demoConfig.collections.Products),
+      'product_1'
+    );
     const productData = {
       id: productRef.id,
       name: `${randomChoice(productNames)} Standard`,
       brand: randomChoice(brands),
-      category: randomChoice(['Electronics', 'Computers', 'Mobile', 'Audio', 'Gaming']),
+      category: randomChoice([
+        'Electronics',
+        'Computers',
+        'Mobile',
+        'Audio',
+        'Gaming',
+      ]),
       price: randomNumber(50, 2000),
       originalPrice: randomNumber(60, 2200),
       currency: 'USD',
@@ -409,7 +428,10 @@ async function seedProducts(count = 30) {
       tags: ['bestseller', 'demo'],
       createdAt: getRandomTimestamp(180),
       updatedAt: getRandomTimestamp(30),
-      sales: { totalSold: randomNumber(0, 500), revenue: randomNumber(1000, 50000) },
+      sales: {
+        totalSold: randomNumber(0, 500),
+        revenue: randomNumber(1000, 50000),
+      },
     };
     batch.set(productRef, productData);
     seededProductIds.push(productRef.id);
