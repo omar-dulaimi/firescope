@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/omar-dulaimi/firescope/compare/v1.4.0...v1.5.0) (2026-02-16)
+
+
+### Features
+
+* simplify pro subscription model and env setup ([ba39f47](https://github.com/omar-dulaimi/firescope/commit/ba39f47e309243645aa2aff38569bacd18776c61))
+
 # [1.4.0](https://github.com/omar-dulaimi/firescope/compare/v1.3.0...v1.4.0) (2025-10-15)
 
 
