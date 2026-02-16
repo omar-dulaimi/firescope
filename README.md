@@ -136,12 +136,15 @@ Setup (Pro)
 
 1. Install the Pro build (ZIP) or build locally.
 2. Open the extension Options page and paste your API key (stored in Chrome sync).
-3. Click “View in Console” in the panel to jump to Firebase Console.
+3. Options page shows subscription details (status, name, seats, created, expiry/remaining) from your Pro backend.
+4. Click “View in Console” in the panel to jump to Firebase Console.
 
 Build
 
 - `pnpm build:free` → Free build (no Console button).
-- `pnpm build:pro` → Pro build. Optional: `VITE_PRO_API_BASE=https://your-backend`.
+- `pnpm build:pro` → Pro build.
+- Set backend URL via env: `VITE_PRO_API_BASE=https://your-worker-name.your-subdomain.workers.dev`.
+- Example env files: `.env.development` (local) and `.env.production` (deploy).
 - `pnpm build:both` → Produces `firescope.zip` and `firescope-pro.zip`.
 
 Permissions (Pro)
@@ -152,6 +155,7 @@ Permissions (Pro)
 Notes
 
 - The server builds Console URLs so logic stays private and can evolve without client updates.
+- Reference backend implementation (private repo): `firescope-pro-link-backend` (Cloudflare Workers, `POST /link`).
 - To purchase a Pro API key, please contact me: https://github.com/omar-dulaimi
 
 ### How Pro Works (Sequence)
