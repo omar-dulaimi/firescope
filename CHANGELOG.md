@@ -1,3 +1,11 @@
+## [1.5.2](https://github.com/omar-dulaimi/firescope/compare/v1.5.1...v1.5.2) (2026-07-28)
+
+
+### Bug Fixes
+
+* **ci:** stop commitlint rejecting semantic-release's own release commit ([1ec51c2](https://github.com/omar-dulaimi/firescope/commit/1ec51c2ea59183ca61b23b88b4187bca7ec4d155))
+* **export:** keep the captured limit in every exported query ([c488447](https://github.com/omar-dulaimi/firescope/commit/c488447cee00f957e15608197997690e4ab63673))
+
 ## [1.5.1](https://github.com/omar-dulaimi/firescope/compare/v1.5.0...v1.5.1) (2026-07-28)
 
 
