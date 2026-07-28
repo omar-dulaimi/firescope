@@ -382,7 +382,8 @@ describe('imported bindings are used the way their module exports them', () => {
           const value = mod[binding.imported];
           // Only plain namespace objects are checked. Functions and classes may
           // gain members at runtime, and an object that is empty under Node
-          // (config.js `DOM` needs a document) says nothing about the browser.
+          // (one built from `document` lookups, say) says nothing about the
+          // browser.
           if (
             value === null ||
             typeof value !== 'object' ||

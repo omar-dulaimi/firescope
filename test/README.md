@@ -1,194 +1,113 @@
 # FireScope Testing
 
-This directory contains the test suite for FireScope, including unit tests for core functionality and a custom test runner.
+FireScope's tests run on [Vitest](https://vitest.dev). There is no browser test
+runner and no custom assertion framework: `pnpm test` runs everything, in Node,
+and exits non-zero on the first failure.
 
-## Quick Start
-
-### Option 1: Using npm (Recommended)
-
-```bash
-npm test
-```
-
-This will start a local server and automatically open the test runner in your browser.
-
-### Option 2: Using the test runner script
+## Running the tests
 
 ```bash
-node test/run-tests.js
+pnpm test        # single run, the same command CI runs
+pnpm test:watch  # re-run on change
 ```
 
-Alternative method that does the same as `npm test`.
+A single file, or a single test by name:
 
-### Option 3: Manual browser testing
-
-1. Start a local server in the project root:
-   ```bash
-   python3 -m http.server 8080
-   ```
-2. Open http://localhost:8080/test/test-runner.html in your browser
-
-### Option 4: Direct file opening
-
-Simply open `test/test-runner.html` directly in your browser (may have CORS limitations).
-
-## Test Structure
-
-### Files
-
-- **`test-runner.html`** - Web-based test runner with custom testing framework
-- **`tests.js`** - Main test suite with all unit tests
-- **`run-tests.js`** - CLI script to start server and open tests
-- **`README.md`** - This file
-
-### Test Categories
-
-#### 1. Configuration Tests
-
-- CONFIG object validation
-- Operator mappings
-- URL validation
-
-#### 2. Core Component Tests
-
-- **StateManager**: Collection management, request tracking
-- **SearchManager**: Collection filtering, search logic
-- **NotificationManager**: Enable/disable functionality, message display
-- **RequestProcessor**: Query parsing, URL extraction, operator handling
-- **SettingsManager**: Settings loading/saving, validation
-
-#### 3. Edge Cases & Error Handling
-
-- Invalid input handling
-- Empty/null data scenarios
-- Error recovery
-
-## Test Framework
-
-FireScope uses a custom, lightweight testing framework built into `test-runner.html`. Features include:
-
-- **Describe blocks** for organizing tests
-- **Assertion methods**: `toBe()`, `toEqual()`, `toBeTruthy()`, `toBeFalsy()`, `toContain()`
-- **Async support** for testing ES6 modules
-- **Visual results** with pass/fail indicators
-- **Error reporting** with stack traces
-- **Summary statistics**
-
-### Writing Tests
-
-```javascript
-describe('My Component', async () => {
-  const { MyComponent } = await import('../js/my-component.js');
-  const component = new MyComponent();
-
-  expect(component.someMethod()).toBe('expected result');
-  expect(component.someProperty).toBeTruthy();
-});
+```bash
+pnpm exec vitest run test/unit/query-exporter.test.js
+pnpm exec vitest run -t 'a captured limit is never dropped'
 ```
 
-### Mocking DOM Elements
+Lint and format the test sources with `pnpm run lint:test` and
+`pnpm run format:test`. `pnpm lint` covers `src/`, `demo/`, `scripts/` and
+`test/` together.
 
-Since components often interact with the DOM, tests use mocking:
+## Layout
+
+Everything lives in `test/unit/`. `vitest.config.js` picks up
+`test/unit/**/*.test.js`, so a new file is collected as soon as it is named
+`*.test.js`. Nothing has to be registered anywhere.
+
+| File                          | What it covers                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `query-exporter.test.js`      | `QueryExporter` output for React, Next.js (client and server), Angular, Node, Flutter |
+| `nav-button.pro.test.js`      | The Pro nav button: missing-API-key path, backend call, cache hit                     |
+| `subscription-info.test.js`   | `subscription-info.js` API base normalisation, error codes, response formatting       |
+| `import-contracts.test.js`    | Whole-class guard: every `new X()` and `X.method()` on an imported binding            |
+| `module-reachability.test.js` | Whole-class guard: every `src/**/*.js` is reachable from a manifest entry point       |
+
+The two guards are worth understanding before adding to them. This repo has no
+typechecker, so a call site that misuses an imported binding, or a module that
+stops being imported at all, produces no error anywhere:
+`import-contracts.test.js` catches the first by checking call sites against the
+real exported values, and `module-reachability.test.js` catches the second by
+walking the import graph the build walks. Both fail with a list of offending
+files rather than a single assertion, so a failure names every instance.
+
+## Environment
+
+`vitest.config.js` sets `environment: 'node'` and `globals: true`. A file that
+needs a DOM opts in with a pragma on its first line, as
+`nav-button.pro.test.js` does:
 
 ```javascript
-const originalGetElementById = document.getElementById;
-document.getElementById = id => {
-  if (id === 'myElement')
-    return { textContent: '', classList: { add: () => {} } };
-  return null;
+/* @vitest-environment jsdom */
+```
+
+`chrome.*` is not provided by either environment. Tests that need it assign a
+mock to `global.chrome`; see `setupChromeMocks` in `nav-button.pro.test.js`.
+
+## Edition aliases
+
+`vite.config.js` resolves `#nav-button` and `#more-menu` to a different module
+per edition. `vitest.config.js` mirrors both aliases to their **free** targets,
+because `free` is the default edition in `vite.config.js`. A test that cares
+about the Pro variant imports it by path:
+
+```javascript
+import { createPanelNavButton } from '../../src/js/nav-button.pro.js';
+```
+
+If an alias is added to `vite.config.js`, add it to `vitest.config.js` and to
+`EDITION_ALIASES` in both guard tests, or imports that resolve at build time
+will fail to resolve under Vitest.
+
+## Writing a test
+
+```javascript
+import { describe, it, expect } from 'vitest';
+import { QueryExporter } from '../../src/js/query-exporter.js';
+
+const row = {
+  type: 'structured_query',
+  collectionPath: 'orders',
+  isCollectionGroup: false,
+  filters: [
+    { field: 'status', op: 'EQUAL', value: { stringValue: 'shipped' } },
+  ],
+  orderBy: [],
 };
 
-// ... run tests ...
-
-document.getElementById = originalGetElementById;
-```
-
-## Available npm Scripts
-
-- `npm test` - Run all tests
-- `npm run test:server` - Start test server only
-- `npm run test:open` - Open test runner (server must be running)
-- `npm run lint` - Check JavaScript syntax
-- `npm run validate` - Validate manifest.json
-- `npm run build` - Run all checks (lint + validate)
-
-## Adding New Tests
-
-1. Open `tests.js`
-2. Add a new `describe` block
-3. Import the module to test
-4. Write assertions using `expect()`
-5. Mock any DOM dependencies
-6. Refresh the test runner to see results
-
-### Example Test Addition
-
-```javascript
-describe('New Component Tests', async () => {
-  const { NewComponent } = await import('../js/new-component.js');
-  const component = new NewComponent();
-
-  expect(component.isWorking()).toBe(true);
-  expect(component.getValue()).toEqual({ status: 'ok' });
+describe('QueryExporter: something specific', () => {
+  it('states the behaviour, not the implementation', () => {
+    expect(QueryExporter.toNode(row)).toContain(
+      ".where('status', '==', \"shipped\")"
+    );
+  });
 });
 ```
 
-## Troubleshooting
+Two conventions the existing tests follow:
 
-### Tests Not Loading
+- Build fixtures from what `src/background.js` actually sends to the panel, not
+  from what the module under test happens to accept. The exporter bugs fixed in
+  this repo were all cases where the fixture was tidier than the real payload.
+- Assert on the emitted string, not on internal state. These modules exist to
+  produce text a user pastes into their own project, so that text is the
+  contract.
 
-- Ensure you're running a local server (CORS restrictions)
-- Check browser console for import errors
-- Verify all file paths are correct
+## CI
 
-### DOM-Related Errors
-
-- Make sure DOM elements are properly mocked
-- Check that `document.getElementById` is restored after tests
-- Verify mock objects have all required methods/properties
-
-### Module Import Issues
-
-- Ensure ES6 modules are properly exported
-- Check for circular dependencies
-- Verify file paths are relative to test-runner.html
-
-### Server Issues
-
-- Try a different port if 8080 is in use
-- Ensure Python 3 is installed for the HTTP server
-- Check firewall settings
-
-## Continuous Integration
-
-To run tests in CI environments:
-
-```bash
-# Install dependencies (if any)
-npm install
-
-# Run linting and validation
-npm run build
-
-# For headless testing, consider using a tool like Puppeteer:
-# npm install puppeteer
-# node scripts/headless-test.js
-```
-
-## Best Practices
-
-1. **Mock external dependencies** (DOM, APIs, etc.)
-2. **Test one thing per test** - keep tests focused
-3. **Use descriptive test names** - explain what's being tested
-4. **Clean up after tests** - restore mocked functions
-5. **Test edge cases** - null/undefined inputs, error conditions
-6. **Keep tests fast** - avoid unnecessary delays or complex setup
-
-## Contributing
-
-When adding new functionality:
-
-1. Write tests for new components/methods
-2. Ensure existing tests still pass
-3. Add edge case testing
-4. Update this README if adding new test categories
+`.github/workflows/semantic-release.yml` runs `pnpm run lint` then `pnpm test`
+on Node 20 for every push to `master` and every merged pull request. The release
+job does not run unless both pass.

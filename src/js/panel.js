@@ -828,10 +828,6 @@ window.addEventListener('beforeunload', () => {
   }
 });
 
-// No local normalization needed; handled in console-link-utils
-
-// Operator and timestamp helpers are centralized in console-link-utils.js
-
 render();
 
 function getTypeBadgeLabel(type) {
