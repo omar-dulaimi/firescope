@@ -1,3 +1,10 @@
+## [1.5.1](https://github.com/omar-dulaimi/firescope/compare/v1.5.0...v1.5.1) (2026-07-28)
+
+
+### Bug Fixes
+
+* **export:** stop exporting aggregations and lookups as whole-collection reads ([b1b974b](https://github.com/omar-dulaimi/firescope/commit/b1b974bddceaee085cf7bfb3a421cae7b1fce6b3))
+
 # [1.5.0](https://github.com/omar-dulaimi/firescope/compare/v1.4.0...v1.5.0) (2026-02-16)
 
 
