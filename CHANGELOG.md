@@ -1,3 +1,10 @@
+## [1.5.4](https://github.com/omar-dulaimi/firescope/compare/v1.5.3...v1.5.4) (2026-07-28)
+
+
+### Bug Fixes
+
+* **export:** translate unary filters and keep captured cursors ([57576af](https://github.com/omar-dulaimi/firescope/commit/57576af3ad3aec34d736fb8724ae14c7f41c222b))
+
 ## [1.5.3](https://github.com/omar-dulaimi/firescope/compare/v1.5.2...v1.5.3) (2026-07-28)
 
 
