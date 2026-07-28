@@ -1,3 +1,10 @@
+## [1.5.5](https://github.com/omar-dulaimi/firescope/compare/v1.5.4...v1.5.5) (2026-07-28)
+
+
+### Bug Fixes
+
+* **export:** rebuild filter values in the type they were captured as ([fa0dff0](https://github.com/omar-dulaimi/firescope/commit/fa0dff031273ca6c5ff346262df4283afd76a2b9))
+
 ## [1.5.4](https://github.com/omar-dulaimi/firescope/compare/v1.5.3...v1.5.4) (2026-07-28)
 
 
