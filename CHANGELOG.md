@@ -1,3 +1,10 @@
+## [1.5.3](https://github.com/omar-dulaimi/firescope/compare/v1.5.2...v1.5.3) (2026-07-28)
+
+
+### Bug Fixes
+
+* **export:** keep every where clause on the :runQuery read path ([32828a8](https://github.com/omar-dulaimi/firescope/commit/32828a84ee36779c0b3dd135b23e96e62ce7a9a5))
+
 ## [1.5.2](https://github.com/omar-dulaimi/firescope/compare/v1.5.1...v1.5.2) (2026-07-28)
 
 

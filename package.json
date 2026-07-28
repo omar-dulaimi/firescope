@@ -1,6 +1,6 @@
 {
   "name": "firescope",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "A Chrome DevTools extension for monitoring and analyzing Firestore requests",
   "type": "module",
   "scripts": {
