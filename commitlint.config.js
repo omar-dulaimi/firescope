@@ -9,5 +9,5 @@ export default {
   // and it rejected that commit, which failed the release job itself. Exempting only the release
   // commit keeps the 100 character limit meaningful for commits a human writes, which is the point
   // of the rule, without the tooling tripping over its own output.
-  ignores: [(message) => /^chore\(release\): /.test(message)],
+  ignores: [message => /^chore\(release\): /.test(message)],
 };
