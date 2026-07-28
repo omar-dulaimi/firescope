@@ -8,7 +8,7 @@
     "build": "pnpm run lint && pnpm run build:free",
     "build:free": "EDITION=free vite build && node scripts/check-free-artifacts.js",
     "build:pro": "EDITION=pro vite build",
-    "build:both": "pnpm run build:clean && pnpm run build:free && (cd dist && zip -r ../firescope.zip .) && pnpm run build:clean && pnpm run build:pro && (cd dist && zip -r ../firescope-pro.zip .)",
+    "build:both": "pnpm run artifacts:clean && pnpm run build:clean && pnpm run build:free && (cd dist && zip -r ../firescope.zip .) && pnpm run build:clean && pnpm run build:pro && (cd dist && zip -r ../firescope-pro.zip .)",
     "artifacts:clean": "rm -f firescope.zip firescope-pro.zip",
     "build:ci": "pnpm run artifacts:clean && pnpm run build:both",
     "build:dev": "vite build --mode development",

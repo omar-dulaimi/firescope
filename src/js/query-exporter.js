@@ -70,45 +70,24 @@ const UNARY_FILTERS = {
   IS_NOT_NAN: { js: "'!=', NaN", dart: 'isNotEqualTo: double.nan' },
 };
 
+const NO_OP_SPELLING = 'that this SDK has no spelling for';
+const NO_VALUE_LITERAL = 'whose value has no faithful literal here';
+
 /**
  * A captured clause we cannot spell for this target is left out of the export,
  * which makes the exported query read a wider slice than the app did. Say so:
  * silently emitting fewer filters is exactly how an export turns into a bill.
+ *
+ * `reason` distinguishes an operator we cannot name from a value we cannot name,
+ * because they are fixed in different places.
  */
-function droppedFilterNote(f) {
+function droppedFilterNote(f, reason) {
   const field = f?.field == null ? '(unnamed field)' : String(f.field);
   const op = f?.op == null ? '(unknown operator)' : String(f.op);
   return (
-    `// FireScope captured a ${op} filter on ${field} that this SDK has no spelling for.\n` +
+    `// FireScope captured a ${op} filter on ${field} ${reason}.\n` +
     `// It is left out, so this query reads MORE documents than the app did.\n`
   );
-}
-
-function normalizeValue(v) {
-  if (typeof v !== 'object' || v === null) return v;
-  const valueType = Object.keys(v)[0];
-  if (!valueType) return v;
-  const value = v[valueType];
-  switch (valueType) {
-    case 'stringValue':
-      return value;
-    case 'integerValue':
-      return parseInt(value);
-    case 'doubleValue':
-      return parseFloat(value);
-    case 'booleanValue':
-      return value;
-    case 'nullValue':
-      return null;
-    case 'timestampValue':
-      return value;
-    case 'arrayValue':
-      return value?.values ? value.values.map(normalizeValue) : [];
-    case 'mapValue':
-      return value?.fields || {};
-    default:
-      return v;
-  }
 }
 
 function dartify(value) {
@@ -253,7 +232,14 @@ function limitNote(count) {
 }
 
 // ---------------------------------------------------------------------------
-// Cursors
+// Wire values, then cursors
+//
+// A filter value and a cursor value are the same thing on the wire: a Firestore
+// `Value`. Both go through decodeWireValue/renderWireValue below, deliberately.
+// They used to have separate converters, and the filter one was wrong in every
+// way the cursor one had already been fixed: a timestamp came out as the string
+// Firestore happened to encode it as, and a map came out as its raw wire
+// encoding. Neither errored. Both ran, and answered a different question.
 //
 // A `startAt` / `endAt` cursor bounds the slice of the ordered range a query
 // reads. Losing one widens the read to the whole range, which Firestore bills
@@ -327,14 +313,17 @@ function decodeReference(value) {
 }
 
 /**
- * Split one wire cursor value into something each target can render in its own
+ * Split one wire `Value` into something each target can render in its own
  * spelling, or null when there is no faithful literal for it.
  *
- * Null is not a failure to be papered over: an approximated cursor points at a
- * different document than the app's did, so the honest options are the exact
- * value or a note saying the bound was lost.
+ * Used for filter values and for cursor values, which are the same wire type.
+ *
+ * Null is not a failure to be papered over. An approximated cursor points at a
+ * different document than the app's did, and an approximated filter value
+ * matches different documents than the app's did, so the honest options are the
+ * exact value or a note saying what was lost.
  */
-function decodeCursorValue(v) {
+function decodeWireValue(v) {
   if (typeof v !== 'object' || v === null) return null;
   const valueType = Object.keys(v)[0];
   if (!valueType) return null;
@@ -372,7 +361,7 @@ function decodeCursorValue(v) {
       return decodeReference(value);
     case 'arrayValue': {
       const raw = Array.isArray(value?.values) ? value.values : [];
-      const items = raw.map(decodeCursorValue);
+      const items = raw.map(decodeWireValue);
       return items.some(i => i === null) ? null : { kind: 'array', items };
     }
     case 'mapValue': {
@@ -380,7 +369,7 @@ function decodeCursorValue(v) {
       if (fields != null && typeof fields !== 'object') return null;
       const entries = Object.entries(fields || {}).map(([k, val]) => [
         k,
-        decodeCursorValue(val),
+        decodeWireValue(val),
       ]);
       return entries.some(([, val]) => val === null)
         ? null
@@ -432,7 +421,7 @@ function getCursors(q) {
     const values = Array.isArray(raw?.values) ? raw.values : null;
     if (!values || !values.length) continue;
     const decoded = values.map((v, i) => {
-      const value = decodeCursorValue(v);
+      const value = decodeWireValue(v);
       return orderBy[i]?.field === KEY_FIELD
         ? asDocumentIdCursor(value, isGroup)
         : value;
@@ -445,7 +434,7 @@ function getCursors(q) {
   return out;
 }
 
-function renderCursorValue(decoded, dialect) {
+function renderWireValue(decoded, dialect) {
   switch (decoded.kind) {
     case 'nan':
       return dialect.nan;
@@ -460,11 +449,11 @@ function renderCursorValue(decoded, dialect) {
     case 'reference':
       return dialect.reference(decoded.path);
     case 'array':
-      return `[${decoded.items.map(i => renderCursorValue(i, dialect)).join(', ')}]`;
+      return `[${decoded.items.map(i => renderWireValue(i, dialect)).join(', ')}]`;
     case 'map':
       return `{ ${decoded.entries
         .map(
-          ([k, val]) => `${dialect.key(k)}: ${renderCursorValue(val, dialect)}`
+          ([k, val]) => `${dialect.key(k)}: ${renderWireValue(val, dialect)}`
         )
         .join(', ')} }`;
     default:
@@ -536,7 +525,7 @@ function cursorCalls(q, dialect, joinArgs) {
     }
     calls.push({
       fn: cursor.fn,
-      args: joinArgs(cursor.values.map(v => renderCursorValue(v, dialect))),
+      args: joinArgs(cursor.values.map(v => renderWireValue(v, dialect))),
     });
   }
   return { notes, calls };
@@ -554,34 +543,51 @@ function hasField(f) {
 }
 
 /**
- * The `where(...)` arguments for one captured clause in JS SDK spelling (the Web
- * and Admin SDKs agree on the operator set), or null when it cannot be spelled.
+ * The clause's captured value, rendered in `dialect`, or null when it has no
+ * faithful literal there.
+ *
+ * This is the cursor decoder, on purpose. Filter values used to go through a
+ * converter of their own that returned the wire encoding when it did not
+ * recognise a type and the raw string when it did: `where('createdAt', '>',
+ * "2024-03-01T10:00:00Z")` went back to Firestore as a stringValue rather than a
+ * timestampValue, and a map filter went back as a map of wire encodings. Those
+ * queries run. They just match different documents.
  */
-function jsWhereArgs(f) {
-  if (!hasField(f)) return null;
-  const unary = UNARY_FILTERS[f?.op];
-  if (unary) return `${sq(f.field)}, ${unary.js}`;
-  const op = toSymbolOp(f?.op);
-  if (op === null) return null;
-  const json = JSON.stringify(normalizeValue(f?.value));
-  if (json === undefined) return null;
-  return `${sq(f.field)}, '${op}', ${json}`;
+function whereValue(f, dialect) {
+  const decoded = decodeWireValue(f?.value);
+  return decoded === null ? null : renderWireValue(decoded, dialect);
 }
 
 /**
- * The `where(...)` arguments for one captured clause in Flutter spelling, or
- * null when it cannot be spelled.
+ * The `where(...)` arguments for one captured clause in JS SDK spelling (the Web
+ * and Admin SDKs agree on the operator set), or the note that stands in for the
+ * clause when it cannot be spelled.
+ */
+function jsWhereArgs(f, dialect) {
+  if (!hasField(f)) return { note: droppedFilterNote(f, NO_OP_SPELLING) };
+  const unary = UNARY_FILTERS[f?.op];
+  if (unary) return { args: `${sq(f.field)}, ${unary.js}` };
+  const op = toSymbolOp(f?.op);
+  if (op === null) return { note: droppedFilterNote(f, NO_OP_SPELLING) };
+  const value = whereValue(f, dialect);
+  if (value === null) return { note: droppedFilterNote(f, NO_VALUE_LITERAL) };
+  return { args: `${sq(f.field)}, '${op}', ${value}` };
+}
+
+/**
+ * The `where(...)` arguments for one captured clause in Flutter spelling, or the
+ * note that stands in for the clause when it cannot be spelled.
  */
 function flutterWhereArgs(f) {
-  if (!hasField(f)) return null;
+  if (!hasField(f)) return { note: droppedFilterNote(f, NO_OP_SPELLING) };
   const unary = UNARY_FILTERS[f?.op];
-  if (unary) return `${sq(f.field)}, ${unary.dart}`;
+  if (unary) return { args: `${sq(f.field)}, ${unary.dart}` };
   const op = toSymbolOp(f?.op);
   const param = op === null ? null : toFlutterParam(op);
-  if (!param) return null;
-  const val = dartify(normalizeValue(f?.value));
-  if (val === undefined) return null;
-  return `${sq(f.field)}, ${param}: ${val}`;
+  if (!param) return { note: droppedFilterNote(f, NO_OP_SPELLING) };
+  const value = whereValue(f, FLUTTER_DIALECT);
+  if (value === null) return { note: droppedFilterNote(f, NO_VALUE_LITERAL) };
+  return { args: `${sq(f.field)}, ${param}: ${value}` };
 }
 
 function webDirection(o) {
@@ -596,11 +602,12 @@ function webDirection(o) {
  * cursor values need in order to rebuild their `doc(...)` reference.
  */
 function webQueryLines(q, dbVar) {
+  const dialect = webDialect(dbVar);
   let code = '';
   (q.filters || []).forEach(f => {
-    const args = jsWhereArgs(f);
-    if (args === null) {
-      code += droppedFilterNote(f);
+    const { args, note } = jsWhereArgs(f, dialect);
+    if (note) {
+      code += note;
       return;
     }
     code += `qRef = query(qRef, where(${args}));\n`;
@@ -608,7 +615,7 @@ function webQueryLines(q, dbVar) {
   (q.orderBy || []).forEach(o => {
     code += `qRef = query(qRef, orderBy(${sq(o.field)}, ${webDirection(o)}));\n`;
   });
-  const { notes, calls } = cursorCalls(q, webDialect(dbVar), joinJsArgs);
+  const { notes, calls } = cursorCalls(q, dialect, joinJsArgs);
   code += notes;
   if (calls.length) code += CURSOR_NOTE;
   calls.forEach(c => {
@@ -623,10 +630,11 @@ function webQueryLines(q, dbVar) {
 }
 
 /**
- * The Web SDK helpers a cursor value needs importing beyond the cursor function
- * itself: a Timestamp, GeoPoint or document reference is a constructor call.
+ * The Web SDK helpers a filter or cursor value needs importing beyond the call
+ * that carries it: a Timestamp, GeoPoint or document reference is a constructor
+ * call, and an unimported constructor is a snippet that throws on paste.
  */
-function cursorValueImports(decoded, acc) {
+function valueImports(decoded, acc) {
   if (!decoded) return acc;
   switch (decoded.kind) {
     case 'timestamp':
@@ -639,10 +647,10 @@ function cursorValueImports(decoded, acc) {
       acc.add('doc');
       break;
     case 'array':
-      decoded.items.forEach(i => cursorValueImports(i, acc));
+      decoded.items.forEach(i => valueImports(i, acc));
       break;
     case 'map':
-      decoded.entries.forEach(([, val]) => cursorValueImports(val, acc));
+      decoded.entries.forEach(([, val]) => valueImports(val, acc));
       break;
     default:
       break;
@@ -657,18 +665,25 @@ function cursorValueImports(decoded, acc) {
  * not run.
  */
 function webQueryImports(q) {
-  const cursors = new Set();
+  const extra = new Set();
   for (const cursor of getCursors(q)) {
     if (!cursor.values) continue;
-    cursors.add(cursor.fn);
-    cursor.values.forEach(v => cursorValueImports(v, cursors));
+    extra.add(cursor.fn);
+    cursor.values.forEach(v => valueImports(v, extra));
+  }
+  // Only clauses that survive to a where() call: importing Timestamp for a
+  // clause the export had to drop leaves an unused import in the snippet.
+  for (const f of q?.filters || []) {
+    if (!hasField(f) || UNARY_FILTERS[f?.op]) continue;
+    if (toSymbolOp(f?.op) === null) continue;
+    valueImports(decodeWireValue(f?.value), extra);
   }
   return [
     'query',
     'where',
     'orderBy',
     ...(getLimit(q) === null ? [] : ['limit']),
-    ...cursors,
+    ...extra,
   ];
 }
 
@@ -680,9 +695,9 @@ function adminQueryChain(q) {
   const chain = [];
   let notes = '';
   (q.filters || []).forEach(f => {
-    const args = jsWhereArgs(f);
-    if (args === null) {
-      notes += droppedFilterNote(f);
+    const { args, note } = jsWhereArgs(f, ADMIN_DIALECT);
+    if (note) {
+      notes += note;
       return;
     }
     chain.push(`.where(${args})`);
@@ -719,9 +734,9 @@ function flutterQueryChain(q) {
   const chain = [];
   let notes = '';
   (q.filters || []).forEach(f => {
-    const args = flutterWhereArgs(f);
-    if (args === null) {
-      notes += droppedFilterNote(f);
+    const { args, note } = flutterWhereArgs(f);
+    if (note) {
+      notes += note;
       return;
     }
     chain.push(`.where(${args})`);

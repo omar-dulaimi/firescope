@@ -1267,3 +1267,411 @@ describe('a clause with nothing to filter on is never invented', () => {
     }
   );
 });
+
+// ---------------------------------------------------------------------------
+// Filter values.
+//
+// A filter value and a cursor value are the same wire `Value`, but they used to
+// go through different converters, and only the cursor one was right. The filter
+// one returned the raw wire encoding for anything it did not recognise and the
+// bare string for a timestamp, so `where('createdAt', '>', <timestamp>)` was
+// exported as `where('createdAt', '>', "2024-03-01T10:00:00Z")` and went back to
+// Firestore as a stringValue.
+//
+// That is worse than a dropped clause. There is no error and no bill: the
+// exported query runs, and quietly answers a different question than the app did.
+//
+// Every expectation below was checked by executing the emitted snippet against
+// firebase 10.14.1 pointed at a local recording server and reading the
+// structuredQuery it put on the wire, out of an unpacked firescope.zip.
+// ---------------------------------------------------------------------------
+
+const REF = 'projects/demo-firescope/databases/(default)/documents';
+
+/** One `where` tree as the `:runQuery` body Firestore really receives. */
+function filterWire(where) {
+  return {
+    structuredQuery: { from: [{ collectionId: 'orders' }], where },
+  };
+}
+
+function fieldFilter(field, op, value) {
+  return { fieldFilter: { field: { fieldPath: field }, op, value } };
+}
+
+const VALUE_WIRE = {
+  // Firestore truncates timestamps to microseconds, in the backend and in the
+  // SDK before it sends, so a captured wire timestamp never carries finer nanos.
+  timestamp: filterWire(
+    fieldFilter('createdAt', 'GREATER_THAN', {
+      timestampValue: '2024-03-01T10:00:00Z',
+    })
+  ),
+  timestampWithNanos: filterWire(
+    fieldFilter('createdAt', 'LESS_THAN_OR_EQUAL', {
+      timestampValue: '2023-11-14T22:13:20.123456000Z',
+    })
+  ),
+  timestampAsObject: filterWire(
+    fieldFilter('updatedAt', 'GREATER_THAN_OR_EQUAL', {
+      timestampValue: { seconds: '1700000000', nanos: 500000 },
+    })
+  ),
+  reference: filterWire(
+    fieldFilter('owner', 'EQUAL', { referenceValue: `${REF}/users/u1` })
+  ),
+  geoPoint: filterWire(
+    fieldFilter('location', 'EQUAL', {
+      geoPointValue: { latitude: 37.4219983, longitude: -122.084 },
+    })
+  ),
+  bytes: filterWire(fieldFilter('signature', 'EQUAL', { bytesValue: 'AQID' })),
+  // Exported as its raw wire encoding, this went back to Firestore as a nested
+  // mapValue: {"a":{"mapValue":{"fields":{"integerValue":{"stringValue":"1"}}}}}
+  map: filterWire(
+    fieldFilter('payload', 'EQUAL', {
+      mapValue: { fields: { a: { integerValue: '1' } } },
+    })
+  ),
+  nestedMap: filterWire(
+    fieldFilter('meta', 'EQUAL', {
+      mapValue: {
+        fields: {
+          at: { timestampValue: '2024-03-01T10:00:00Z' },
+          'not-an-ident': { stringValue: 'x' },
+        },
+      },
+    })
+  ),
+  array: filterWire(
+    fieldFilter('status', 'IN', {
+      arrayValue: {
+        values: [
+          { stringValue: 'shipped' },
+          { integerValue: '3' },
+          { timestampValue: '2024-03-01T10:00:00Z' },
+          { booleanValue: false },
+        ],
+      },
+    })
+  ),
+  arrayWithNaNAndNull: filterWire(
+    fieldFilter('scores', 'ARRAY_CONTAINS_ANY', {
+      arrayValue: { values: [{ doubleValue: 'NaN' }, { nullValue: null }] },
+    })
+  ),
+  nullValue: filterWire(
+    fieldFilter('archived', 'ARRAY_CONTAINS', { nullValue: null })
+  ),
+  hugeInteger: filterWire(
+    fieldFilter('ledgerId', 'EQUAL', { integerValue: '9007199254740993' })
+  ),
+  safeInteger: filterWire(
+    fieldFilter('total', 'GREATER_THAN_OR_EQUAL', { integerValue: '100' })
+  ),
+  timestampLookingString: filterWire(
+    fieldFilter('label', 'EQUAL', { stringValue: '2024-03-01T10:00:00Z' })
+  ),
+};
+
+/** The wire type tags. None of these may ever reach an exported snippet. */
+const WIRE_TYPE_KEYS = [
+  'stringValue',
+  'integerValue',
+  'doubleValue',
+  'booleanValue',
+  'nullValue',
+  'timestampValue',
+  'geoPointValue',
+  'referenceValue',
+  'bytesValue',
+  'arrayValue',
+  'mapValue',
+];
+
+describe('filter values keep their wire type', () => {
+  beforeAll(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  it.each(Object.entries(VALUE_WIRE))(
+    'the Listen/channel path agrees with the raw JSON body path for %s',
+    async (_name, body) => {
+      const [viaJson] = await captureRows({ body, url: `${FS_DOCS}:runQuery` });
+      const [viaForm] = await captureRows({
+        formData: asListenFormData(body),
+        url: `${FS_DOCS.replace('/documents', '')}/google.firestore.v1.Firestore/Listen/channel`,
+      });
+      expect(viaForm.filters).toEqual(viaJson.filters);
+    }
+  );
+
+  // The whole class: an export that still carries a wire type tag is an export
+  // whose value will be re-encoded as something else, whatever the value was.
+  it.each(ALL_TARGETS)(
+    '%s never leaks a raw wire encoding into an exported value',
+    async target => {
+      const leaks = [];
+      for (const [name, body] of Object.entries(VALUE_WIRE)) {
+        const [row] = await captureRows({ body, url: `${FS_DOCS}:runQuery` });
+        const emitted = withoutComments(QueryExporter[target](row));
+        for (const key of WIRE_TYPE_KEYS) {
+          if (emitted.includes(`${key}"`) || emitted.includes(`${key}:`)) {
+            leaks.push(`${name} leaked ${key}`);
+          }
+        }
+      }
+      expect(leaks).toEqual([]);
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s rebuilds a timestamp filter as a Timestamp, not the string it arrived as',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.timestamp });
+      expect(QueryExporter[target](row)).toContain(
+        "where('createdAt', '>', new Timestamp(1709287200, 0))"
+      );
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s keeps a timestamp filter to the microsecond it was captured at',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.timestampWithNanos });
+      expect(QueryExporter[target](row)).toContain(
+        "where('createdAt', '<=', new Timestamp(1700000000, 123456000))"
+      );
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s reads a seconds/nanos timestamp filter as well as an RFC3339 one',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.timestampAsObject });
+      expect(QueryExporter[target](row)).toContain(
+        "where('updatedAt', '>=', new Timestamp(1700000000, 500000))"
+      );
+    }
+  );
+
+  it.each(ADMIN_TARGETS)(
+    '%s rebuilds a timestamp filter as an Admin SDK Timestamp',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.timestamp });
+      expect(QueryExporter[target](row)).toContain(
+        ".where('createdAt', '>', new admin.firestore.Timestamp(1709287200, 0))"
+      );
+    }
+  );
+
+  it('toFlutter rebuilds a timestamp filter as a Flutter Timestamp', async () => {
+    const [row] = await captureRows({ body: VALUE_WIRE.timestamp });
+    expect(QueryExporter.toFlutter(row)).toContain(
+      ".where('createdAt', isGreaterThan: Timestamp(1709287200, 0))"
+    );
+  });
+
+  it.each(WEB_TARGETS)(
+    '%s rebuilds a reference filter as a document reference',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.reference });
+      const dbVar = target === 'toAngular' ? 'firestore' : 'db';
+      expect(QueryExporter[target](row)).toContain(
+        `where('owner', '==', doc(${dbVar}, 'users/u1'))`
+      );
+    }
+  );
+
+  it.each(ADMIN_TARGETS)(
+    '%s rebuilds a reference filter as db.doc()',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.reference });
+      expect(QueryExporter[target](row)).toContain(
+        ".where('owner', '==', db.doc('users/u1'))"
+      );
+    }
+  );
+
+  it('toFlutter rebuilds a reference filter as a Flutter document reference', async () => {
+    const [row] = await captureRows({ body: VALUE_WIRE.reference });
+    expect(QueryExporter.toFlutter(row)).toContain(
+      ".where('owner', isEqualTo: FirebaseFirestore.instance.doc('users/u1'))"
+    );
+  });
+
+  it.each(ALL_TARGETS)(
+    '%s rebuilds a geopoint filter as a GeoPoint',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.geoPoint });
+      expect(QueryExporter[target](row)).toContain(
+        'GeoPoint(37.4219983, -122.084)'
+      );
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s rebuilds a map filter as a plain object, not as its wire encoding',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.map });
+      expect(QueryExporter[target](row)).toContain(
+        "where('payload', '==', { a: 1 })"
+      );
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s rebuilds the values inside a map filter too',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.nestedMap });
+      expect(QueryExporter[target](row)).toContain(
+        "where('meta', '==', { at: new Timestamp(1709287200, 0), 'not-an-ident': \"x\" })"
+      );
+    }
+  );
+
+  it('toFlutter rebuilds a map filter as a Dart map', async () => {
+    const [row] = await captureRows({ body: VALUE_WIRE.nestedMap });
+    expect(QueryExporter.toFlutter(row)).toContain(
+      ".where('meta', isEqualTo: { 'at': Timestamp(1709287200, 0), 'not-an-ident': \"x\" })"
+    );
+  });
+
+  it.each(WEB_TARGETS)(
+    '%s rebuilds every element of an array filter',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.array });
+      expect(QueryExporter[target](row)).toContain(
+        "where('status', 'in', [\"shipped\", 3, new Timestamp(1709287200, 0), false])"
+      );
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s spells NaN and null inside an array filter',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.arrayWithNaNAndNull });
+      const code = QueryExporter[target](row);
+      expect(code).toContain(
+        target === 'toFlutter' ? '[double.nan, null]' : '[NaN, null]'
+      );
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s spells a null filter value as null',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.nullValue });
+      expect(QueryExporter[target](row)).toMatch(
+        /archived',\s*(?:'array-contains',\s*)?(?:arrayContains:\s*)?null\)/
+      );
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s leaves out an integer past 2^53 rather than naming a different one',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.hugeInteger });
+      const code = QueryExporter[target](row);
+      // parseInt('9007199254740993') is 9007199254740992: a query for a ledger
+      // entry the app never asked about, with nothing to say it happened.
+      expect(code).not.toContain('9007199254740992');
+      expect(withoutComments(code)).not.toMatch(/where\(/);
+      expect(code).toContain('whose value has no faithful literal here');
+      expect(code).toContain('MORE documents than the app did');
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s still names an integer inside the safe range',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.safeInteger });
+      expect(QueryExporter[target](row)).toMatch(/total',[^)]*100\)/);
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s leaves out a bytes filter rather than emitting its wire encoding',
+    async target => {
+      const [row] = await captureRows({ body: VALUE_WIRE.bytes });
+      const code = QueryExporter[target](row);
+      expect(withoutComments(code)).not.toMatch(/where\(/);
+      expect(code).toContain('whose value has no faithful literal here');
+      expect(code).toContain('MORE documents than the app did');
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s leaves a string that looks like a timestamp as a string',
+    async target => {
+      const [row] = await captureRows({
+        body: VALUE_WIRE.timestampLookingString,
+      });
+      const code = QueryExporter[target](row);
+      expect(code).toContain('"2024-03-01T10:00:00Z"');
+      expect(code).not.toContain('Timestamp(');
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s imports every helper a filter value calls',
+    async target => {
+      for (const name of ['timestamp', 'reference', 'geoPoint', 'nestedMap']) {
+        const [row] = await captureRows({ body: VALUE_WIRE[name] });
+        const code = QueryExporter[target](row);
+        const imported = code
+          .match(/^import \{([^}]*)\} from '[^']*';$/m)[1]
+          .split(',')
+          .map(s => s.trim());
+        const body = code
+          .split('\n')
+          .filter(l => !l.startsWith('import ') && !l.startsWith('//'))
+          .join('\n');
+        const called = new Set(
+          [...body.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)].map(
+            m => m[1]
+          )
+        );
+        for (const fn of called) expect(`${name}: ${imported}`).toContain(fn);
+      }
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s imports no constructor for a clause it had to drop',
+    async target => {
+      const [row] = await captureRows({
+        body: filterWire(
+          fieldFilter('createdAt', 'SOMETHING_NEW', {
+            timestampValue: '2024-03-01T10:00:00Z',
+          })
+        ),
+      });
+      const code = QueryExporter[target](row);
+      expect(code).not.toMatch(/^import \{[^}]*\bTimestamp\b/m);
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s keeps a filter value intact on an aggregation too',
+    async target => {
+      const [row] = await captureRows({
+        url: `${FS_DOCS}:runAggregationQuery`,
+        body: {
+          structuredAggregationQuery: {
+            aggregations: [{ alias: 'count', count: {} }],
+            structuredQuery: {
+              from: [{ collectionId: 'orders' }],
+              where: fieldFilter('createdAt', 'GREATER_THAN', {
+                timestampValue: '2024-03-01T10:00:00Z',
+              }),
+            },
+          },
+        },
+      });
+      const code = QueryExporter[target](row);
+      expect(code).toContain('Timestamp(1709287200, 0)');
+      expect(code).not.toMatch(/getDocs\s*\(/);
+    }
+  );
+});
