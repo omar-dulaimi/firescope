@@ -213,3 +213,90 @@ describe('QueryExporter: ordinary collection queries are unaffected', () => {
     expect(QueryExporter.toNode(row)).toContain("db.collectionGroup('Users')");
   });
 });
+
+describe('QueryExporter: a captured limit is never dropped', () => {
+  // A `.limit(20)` is the difference between paying for 20 document reads and
+  // paying for every document in the collection. Both are billed per document,
+  // so an export that silently drops the limit hands the user an unbounded read.
+  const limitedRow = {
+    type: 'structured_query',
+    collectionPath: 'Users',
+    isCollectionGroup: false,
+    filters: [{ field: 'active', op: 'EQUAL', value: { booleanValue: true } }],
+    orderBy: [{ field: 'createdAt', direction: 'DESCENDING' }],
+    limit: 20,
+  };
+
+  it.each(ALL_TARGETS)(
+    '%s never exports a limited query as an unbounded read',
+    target => {
+      expect(QueryExporter[target](limitedRow)).toMatch(/limit\(20\)/);
+    }
+  );
+
+  it.each(WEB_TARGETS)('%s imports the limit helper it calls', target => {
+    const code = QueryExporter[target](limitedRow);
+    expect(code).toContain('qRef = query(qRef, limit(20));');
+    expect(code).toMatch(
+      /^import \{[^}]*\blimit\b[^}]*\} from '(firebase\/firestore|@angular\/fire\/firestore)';$/m
+    );
+  });
+
+  it.each([...ADMIN_TARGETS, 'toFlutter'])(
+    '%s chains .limit() onto the query',
+    target => {
+      expect(QueryExporter[target](limitedRow)).toContain('.limit(20)');
+    }
+  );
+
+  it.each(ALL_TARGETS)('%s applies the limit after orderBy', target => {
+    const code = QueryExporter[target](limitedRow);
+    expect(code.indexOf('limit(20)')).toBeGreaterThan(
+      code.indexOf('createdAt')
+    );
+  });
+
+  it.each(ALL_TARGETS)('%s states what the limit costs', target => {
+    expect(QueryExporter[target](limitedRow)).toContain(
+      'reads at most 20 documents'
+    );
+  });
+
+  it.each(ALL_TARGETS)('%s keeps a limit of 1', target => {
+    const code = QueryExporter[target]({ ...limitedRow, limit: 1 });
+    expect(code).toMatch(/limit\(1\)/);
+    expect(code).toContain('reads at most 1 document.');
+  });
+
+  it.each(ALL_TARGETS)('%s keeps the limit on a group query', target => {
+    const code = QueryExporter[target]({
+      ...limitedRow,
+      isCollectionGroup: true,
+    });
+    expect(code).toMatch(/limit\(20\)/);
+  });
+
+  it.each(ALL_TARGETS)('%s invents no limit when none was captured', target => {
+    const code = QueryExporter[target]({ ...limitedRow, limit: undefined });
+    expect(code).not.toMatch(/limit\(/);
+    expect(code).not.toContain('reads at most');
+  });
+
+  it.each(ALL_TARGETS)('%s ignores a limit that is not a count', target => {
+    for (const bad of [null, 0, -5, NaN, 'abc', {}]) {
+      const code = QueryExporter[target]({ ...limitedRow, limit: bad });
+      expect(code).not.toMatch(/limit\(/);
+    }
+  });
+
+  it.each(ALL_TARGETS)(
+    '%s keeps a limited aggregation both server-side and bounded',
+    target => {
+      const code = QueryExporter[target]({ ...aggregationRow, limit: 5 });
+      expect(code).toMatch(/limit\(5\)/);
+      expect(code).not.toMatch(/getDocs\s*\(/);
+      expect(code).not.toMatch(/queryRef\.get\(\)/);
+      expect(code).not.toMatch(/snap\.docs/);
+    }
+  );
+});

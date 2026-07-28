@@ -7,6 +7,8 @@ build/
 
 # Auto-generated files
 demo/firebase-env.js
+# Written by semantic-release; formatting it here only fights the next release
+CHANGELOG.md
 
 # Package files
 package-lock.json

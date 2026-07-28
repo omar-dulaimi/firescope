@@ -173,7 +173,30 @@ const NO_DOC_PATHS_NOTE =
   '// far more than the single-document read this request actually performed.';
 
 /**
- * Web SDK (modular) filter/orderBy lines, operating on a `qRef` variable.
+ * The captured `limit`, as a usable document count, or null when the request had
+ * none. Anything that is not a positive whole number is treated as absent rather
+ * than emitted, so a malformed capture cannot invent a cap the request never had.
+ */
+function getLimit(q) {
+  const raw = q?.limit;
+  const n =
+    typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return null;
+  const count = Math.trunc(n);
+  return count > 0 ? count : null;
+}
+
+/**
+ * A limit is a billing guard: it is the difference between reading `n` documents
+ * and reading the whole collection, and collection reads are billed per document.
+ * Say so in the export, the same way the aggregation and lookup exports do.
+ */
+function limitNote(count) {
+  return `// Captured limit: this query reads at most ${count} document${count === 1 ? '' : 's'}.\n`;
+}
+
+/**
+ * Web SDK (modular) filter/orderBy/limit lines, operating on a `qRef` variable.
  */
 function webQueryLines(q) {
   let code = '';
@@ -188,11 +211,29 @@ function webQueryLines(q) {
       : "'asc'";
     code += `qRef = query(qRef, orderBy('${o.field}', ${dir}));\n`;
   });
+  const count = getLimit(q);
+  if (count !== null) {
+    code += limitNote(count);
+    code += `qRef = query(qRef, limit(${count}));\n`;
+  }
   return code;
 }
 
 /**
- * Admin SDK filter/orderBy chain segments.
+ * The Web SDK helpers a query needs beyond the collection accessor. `limit` is
+ * only imported when the request actually carried one.
+ */
+function webQueryImports(q) {
+  return [
+    'query',
+    'where',
+    'orderBy',
+    ...(getLimit(q) === null ? [] : ['limit']),
+  ];
+}
+
+/**
+ * Admin SDK filter/orderBy/limit chain segments.
  */
 function adminQueryChain(q) {
   const chain = [];
@@ -207,7 +248,53 @@ function adminQueryChain(q) {
       : "'asc'";
     chain.push(`.orderBy('${o.field}', ${dir})`);
   });
+  const count = getLimit(q);
+  if (count !== null) chain.push(`.limit(${count})`);
   return chain;
+}
+
+/**
+ * The whole `const queryRef = ...` statement for the Admin SDK, so that every
+ * Admin target builds the chain, limit included, from one place.
+ */
+function adminQueryRefStatement(q) {
+  const chain = adminQueryChain(q);
+  const count = getLimit(q);
+  let code = count === null ? '' : limitNote(count);
+  code += `const queryRef = ref${chain.length ? '\n  ' + chain.join('\n  ') : ''};\n`;
+  return code;
+}
+
+/**
+ * Flutter filter/orderBy/limit chain segments.
+ */
+function flutterQueryChain(q) {
+  const chain = [];
+  (q.filters || []).forEach(f => {
+    const param = toFlutterParam(toSymbolOp(f.op));
+    const val = normalizeValue(f.value);
+    chain.push(`.where(${sq(f.field)}, ${param}: ${dartify(val)})`);
+  });
+  (q.orderBy || []).forEach(o => {
+    const desc = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
+      ? 'true'
+      : 'false';
+    chain.push(`.orderBy(${sq(o.field)}, descending: ${desc})`);
+  });
+  const count = getLimit(q);
+  if (count !== null) chain.push(`.limit(${count})`);
+  return chain;
+}
+
+/**
+ * The whole `var queryRef = ...` statement for Flutter.
+ */
+function flutterQueryRefStatement(q) {
+  const chain = flutterQueryChain(q);
+  const count = getLimit(q);
+  let code = count === null ? '' : limitNote(count);
+  code += `var queryRef = ref${chain.length ? '\n  ' + chain.join('\n  ') : ''};\n`;
+  return code;
 }
 
 const WEB_AGG_FN = { count: 'count', sum: 'sum', avg: 'average' };
@@ -246,9 +333,7 @@ function webAggregationExport(
   const imports = [
     ...extraImports,
     isGroup ? 'collectionGroup' : 'collection',
-    'query',
-    'where',
-    'orderBy',
+    ...webQueryImports(q),
     'getAggregateFromServer',
     ...aggImports,
   ].join(', ');
@@ -302,7 +387,6 @@ function adminAggregationExport(q, { header }) {
   const path = q.collectionPath || q.collection || 'UNKNOWN';
   const isGroup = !!q.isCollectionGroup;
   const { aggregations, defaulted } = resolveAggregations(q);
-  const chain = adminQueryChain(q);
 
   let code = `${header}\n`;
   if (defaulted) {
@@ -310,7 +394,7 @@ function adminAggregationExport(q, { header }) {
   }
   code += `const db = admin.firestore();\n`;
   code += `let ref = ${isGroup ? `db.collectionGroup('${path}')` : `db.collection('${path}')`};\n`;
-  code += `const queryRef = ref${chain.length ? '\n  ' + chain.join('\n  ') : ''};\n`;
+  code += adminQueryRefStatement(q);
   code += `// Server-side aggregation: billed per index entry scanned, not per document.\n`;
   code += `const snap = await queryRef.aggregate(${adminAggregateSpec(aggregations)}).get();\n`;
   code += `console.log(snap.data());`;
@@ -363,21 +447,18 @@ export const QueryExporter = {
 
     const path = q.collectionPath || q.collection || 'UNKNOWN';
     const isGroup = !!q.isCollectionGroup;
+    const imports = [
+      'Firestore',
+      isGroup ? 'collectionGroup' : 'collection',
+      ...webQueryImports(q),
+      'getDocs',
+    ].join(', ');
+
     let code = `// AngularFire example\n`;
-    code += `import { Firestore, ${isGroup ? 'collectionGroup, ' : ''}collection, query, where, orderBy, getDocs } from '@angular/fire/firestore';\n\n`;
+    code += `import { ${imports} } from '@angular/fire/firestore';\n\n`;
     code += `const ref = ${isGroup ? `collectionGroup(firestore, '${path}')` : `collection(firestore, '${path}')`};\n`;
     code += `let qRef = ref;\n`;
-    (q.filters || []).forEach(f => {
-      const op = toSymbolOp(f.op);
-      const val = normalizeValue(f.value);
-      code += `qRef = query(qRef, where('${f.field}', '${op}', ${JSON.stringify(val)}));\n`;
-    });
-    (q.orderBy || []).forEach(o => {
-      const dir = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
-        ? "'desc'"
-        : "'asc'";
-      code += `qRef = query(qRef, orderBy('${o.field}', ${dir}));\n`;
-    });
+    code += webQueryLines(q);
     code += `const snap = await getDocs(qRef);\nconsole.log(snap.docs.map(d=>({ id: d.id, ...d.data() })));`;
     return code;
   },
@@ -399,33 +480,18 @@ export const QueryExporter = {
 
     const path = q.collectionPath || q.collection || 'UNKNOWN';
     const isGroup = !!q.isCollectionGroup;
-    const needsCollectionGroup = isGroup;
     const imports = [
-      needsCollectionGroup ? 'collectionGroup' : 'collection',
-      'query',
-      'where',
-      'orderBy',
+      isGroup ? 'collectionGroup' : 'collection',
+      ...webQueryImports(q),
       'getDocs',
-    ]
-      .filter(Boolean)
-      .join(', ');
+    ].join(', ');
 
     let code = `// React (Web SDK) — query only\n`;
     code += `import { ${imports} } from 'firebase/firestore';\n\n`;
     code += `// Assumes you have a Firestore instance: const db = ...\n`;
     code += `const ref = ${isGroup ? `collectionGroup(db, '${path}')` : `collection(db, '${path}')`};\n`;
     code += `let qRef = ref;\n`;
-    (q.filters || []).forEach(f => {
-      const op = toSymbolOp(f.op);
-      const val = normalizeValue(f.value);
-      code += `qRef = query(qRef, where('${f.field}', '${op}', ${JSON.stringify(val)}));\n`;
-    });
-    (q.orderBy || []).forEach(o => {
-      const dir = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
-        ? "'desc'"
-        : "'asc'";
-      code += `qRef = query(qRef, orderBy('${o.field}', ${dir}));\n`;
-    });
+    code += webQueryLines(q);
     code += `const snap = await getDocs(qRef);\nconsole.log(snap.docs.map(d=>({ id: d.id, ...d.data() })));`;
     return code;
   },
@@ -447,33 +513,18 @@ export const QueryExporter = {
 
     const path = q.collectionPath || q.collection || 'UNKNOWN';
     const isGroup = !!q.isCollectionGroup;
-    const needsCollectionGroup = isGroup;
     const imports = [
-      needsCollectionGroup ? 'collectionGroup' : 'collection',
-      'query',
-      'where',
-      'orderBy',
+      isGroup ? 'collectionGroup' : 'collection',
+      ...webQueryImports(q),
       'getDocs',
-    ]
-      .filter(Boolean)
-      .join(', ');
+    ].join(', ');
 
     let code = `// Next.js (Client, Web SDK) — query only\n`;
     code += `import { ${imports} } from 'firebase/firestore';\n\n`;
     code += `// Assumes you have a Firestore instance: const db = ...\n`;
     code += `const ref = ${isGroup ? `collectionGroup(db, '${path}')` : `collection(db, '${path}')`};\n`;
     code += `let qRef = ref;\n`;
-    (q.filters || []).forEach(f => {
-      const op = toSymbolOp(f.op);
-      const val = normalizeValue(f.value);
-      code += `qRef = query(qRef, where('${f.field}', '${op}', ${JSON.stringify(val)}));\n`;
-    });
-    (q.orderBy || []).forEach(o => {
-      const dir = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
-        ? "'desc'"
-        : "'asc'";
-      code += `qRef = query(qRef, orderBy('${o.field}', ${dir}));\n`;
-    });
+    code += webQueryLines(q);
     code += `const snap = await getDocs(qRef);\nconsole.log(snap.docs.map(d=>({ id: d.id, ...d.data() })));`;
     return code;
   },
@@ -495,19 +546,7 @@ export const QueryExporter = {
     let code = `// Next.js (Server, Admin SDK) — query only\n`;
     code += `const db = admin.firestore();\n`;
     code += `let ref = ${isGroup ? `db.collectionGroup('${path}')` : `db.collection('${path}')`};\n`;
-    const chain = [];
-    (q.filters || []).forEach(f => {
-      const op = toSymbolOp(f.op);
-      const val = normalizeValue(f.value);
-      chain.push(`.where('${f.field}', '${op}', ${JSON.stringify(val)})`);
-    });
-    (q.orderBy || []).forEach(o => {
-      const dir = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
-        ? "'desc'"
-        : "'asc'";
-      chain.push(`.orderBy('${o.field}', ${dir})`);
-    });
-    code += `const queryRef = ref${chain.length ? '\n  ' + chain.join('\n  ') : ''};\n`;
+    code += adminQueryRefStatement(q);
     code += `const snap = await queryRef.get();\nconsole.log(snap.docs.map(d=>({ id: d.id, ...d.data() })));`;
     return code;
   },
@@ -529,19 +568,7 @@ export const QueryExporter = {
     let code = `// Node.js Admin SDK example\n`;
     code += `const db = admin.firestore();\n`;
     code += `let ref = ${isGroup ? `db.collectionGroup('${path}')` : `db.collection('${path}')`};\n`;
-    const chain = [];
-    (q.filters || []).forEach(f => {
-      const op = toSymbolOp(f.op);
-      const val = normalizeValue(f.value);
-      chain.push(`.where('${f.field}', '${op}', ${JSON.stringify(val)})`);
-    });
-    (q.orderBy || []).forEach(o => {
-      const dir = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
-        ? "'desc'"
-        : "'asc'";
-      chain.push(`.orderBy('${o.field}', ${dir})`);
-    });
-    code += `const queryRef = ref${chain.length ? '\n  ' + chain.join('\n  ') : ''};\n`;
+    code += adminQueryRefStatement(q);
     code += `const snap = await queryRef.get();\nconsole.log(snap.docs.map(d=>({ id: d.id, ...d.data() })));`;
     return code;
   },
@@ -580,22 +607,7 @@ export const QueryExporter = {
         code += `// FireScope did not capture the aggregation list for this request; defaulting to COUNT.\n`;
       }
       code += `final ref = FirebaseFirestore.instance.${isGroup ? `collectionGroup(${sq(path)})` : `collection(${sq(path)})`};\n`;
-      code += `var queryRef = ref`;
-
-      (q.filters || []).forEach(f => {
-        const param = toFlutterParam(toSymbolOp(f.op));
-        const val = normalizeValue(f.value);
-        code += `\n  .where(${sq(f.field)}, ${param}: ${dartify(val)})`;
-      });
-      (q.orderBy || []).forEach(o => {
-        const desc = (o.direction || o.dir || '')
-          .toLowerCase()
-          .startsWith('desc')
-          ? 'true'
-          : 'false';
-        code += `\n  .orderBy(${sq(o.field)}, descending: ${desc})`;
-      });
-      code += `;\n`;
+      code += flutterQueryRefStatement(q);
 
       const specs = aggregations.map(a => {
         if (a.op === 'count') return 'count()';
@@ -617,33 +629,8 @@ export const QueryExporter = {
     const isGroup = !!q.isCollectionGroup;
     let code = `// Flutter Firestore example\n`;
     code += `final ref = FirebaseFirestore.instance.${isGroup ? `collectionGroup('${path}')` : `collection('${path}')`};\n`;
-    code += `var queryRef = ref`;
-
-    (q.filters || []).forEach(f => {
-      const opSym = toSymbolOp(f.op);
-      const param = toFlutterParam(opSym);
-      const val = normalizeValue(f.value);
-      if (
-        param === 'whereIn' ||
-        param === 'whereNotIn' ||
-        param === 'arrayContainsAny'
-      ) {
-        code += `\n  .where('${f.field}', ${param}: ${dartify(val)})`;
-      } else if (param === 'arrayContains') {
-        code += `\n  .where('${f.field}', ${param}: ${dartify(val)})`;
-      } else {
-        code += `\n  .where('${f.field}', ${param}: ${dartify(val)})`;
-      }
-    });
-
-    (q.orderBy || []).forEach(o => {
-      const desc = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
-        ? 'true'
-        : 'false';
-      code += `\n  .orderBy('${o.field}', descending: ${desc})`;
-    });
-
-    code += `;\nfinal snap = await queryRef.get();\nprint(snap.docs.map((d)=>d.data()));`;
+    code += flutterQueryRefStatement(q);
+    code += `final snap = await queryRef.get();\nprint(snap.docs.map((d)=>d.data()));`;
     return code;
   },
 

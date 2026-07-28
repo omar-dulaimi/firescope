@@ -162,3 +162,5 @@ coverage/
 .local/
 firescope-pro.zip
 firescope-free.zip
+# build:both emits the free edition as firescope.zip, not firescope-free.zip
+firescope.zip
