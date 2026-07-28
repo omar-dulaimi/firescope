@@ -6,6 +6,7 @@
   "main": "src/js/main.js",
   "scripts": {
     "dev": "vite",
+    "build": "pnpm run lint && pnpm run build:free",
     "build:free": "EDITION=free vite build && node scripts/check-free-artifacts.js",
     "build:pro": "EDITION=pro vite build",
     "build:both": "pnpm run build:clean && pnpm run build:free && (cd dist && zip -r ../firescope.zip .) && pnpm run build:clean && pnpm run build:pro && (cd dist && zip -r ../firescope-pro.zip .)",

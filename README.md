@@ -56,6 +56,10 @@ Traditional Firestore debugging means digging through network tabs and decipheri
 
 - Angular (AngularFire), Node.js (Admin SDK), Flutter (cloud_firestore), and JSON.
 - Works per request and per sub‑query in grouped requests.
+- Exports match how the request was billed: aggregations come out as server-side
+  aggregations (`getAggregateFromServer` / `.aggregate()`), and document lookups
+  come out as single-document reads (`getDoc` / `db.doc()`), never as a scan of
+  the surrounding collection.
 
 ### 🧩 Helpful Details (when you need them)
 
@@ -354,7 +358,8 @@ pnpm run demo:seed        # Populate demo database
 
 - Aggregation Query
   - COUNT, SUM(field), AVG(field).
-  - Displays an aggregation summary and exports to code.
+  - Displays an aggregation summary and exports to code as a server-side
+    aggregation, so the exported snippet costs the same as the request you saw.
 
 - Batched in One Request
   - Multiple queries can arrive in the same Listen request; FireScope groups them under one card with per-query chips and actions.
