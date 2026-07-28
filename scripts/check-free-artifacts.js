@@ -76,4 +76,4 @@ if (violations.length) {
   process.exit(2);
 }
 
-console.log('[check-free-artifacts] OK — no Pro mentions in free artifacts');
+console.log('[check-free-artifacts] OK: no Pro mentions in free artifacts');

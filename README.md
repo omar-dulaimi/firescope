@@ -83,7 +83,7 @@ Traditional Firestore debugging means digging through network tabs and decipheri
 
 <div align="center">
 
-|               Main Interface                |             Filtering — Part 1              |             Filtering — Part 2              |
+|               Main Interface                |              Filtering, Part 1              |              Filtering, Part 2              |
 | :-----------------------------------------: | :-----------------------------------------: | :-----------------------------------------: |
 | ![Screenshot 1](./assets/screenshots/1.png) | ![Screenshot 2](./assets/screenshots/2.png) | ![Screenshot 3](./assets/screenshots/3.png) |
 
@@ -91,7 +91,7 @@ Traditional Firestore debugging means digging through network tabs and decipheri
 | :-----------------------------------------: | :-----------------------------------------: | :-----------------------------------------: |
 | ![Screenshot 4](./assets/screenshots/4.png) | ![Screenshot 6](./assets/screenshots/6.png) | ![Screenshot 7](./assets/screenshots/7.png) |
 
-|                   Themes                    |              Grouped Requests               |               —                |
+|                   Themes                    |              Grouped Requests               |                                |
 | :-----------------------------------------: | :-----------------------------------------: | :----------------------------: |
 | ![Screenshot 8](./assets/screenshots/8.png) | ![Screenshot 9](./assets/screenshots/9.png) | _More screenshots coming soon_ |
 

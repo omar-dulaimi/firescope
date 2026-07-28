@@ -957,7 +957,7 @@ export const QueryExporter = {
       'getDocs',
     ].join(', ');
 
-    let code = `// React (Web SDK) — query only\n`;
+    let code = `// React (Web SDK), query only\n`;
     code += `import { ${imports} } from 'firebase/firestore';\n\n`;
     code += `// Assumes you have a Firestore instance: const db = ...\n`;
     code += `const ref = ${isGroup ? `collectionGroup(db, '${path}')` : `collection(db, '${path}')`};\n`;
@@ -990,7 +990,7 @@ export const QueryExporter = {
       'getDocs',
     ].join(', ');
 
-    let code = `// Next.js (Client, Web SDK) — query only\n`;
+    let code = `// Next.js (Client, Web SDK), query only\n`;
     code += `import { ${imports} } from 'firebase/firestore';\n\n`;
     code += `// Assumes you have a Firestore instance: const db = ...\n`;
     code += `const ref = ${isGroup ? `collectionGroup(db, '${path}')` : `collection(db, '${path}')`};\n`;
@@ -1014,7 +1014,7 @@ export const QueryExporter = {
 
     const path = q.collectionPath || q.collection || 'UNKNOWN';
     const isGroup = !!q.isCollectionGroup;
-    let code = `// Next.js (Server, Admin SDK) — query only\n`;
+    let code = `// Next.js (Server, Admin SDK), query only\n`;
     code += `const db = admin.firestore();\n`;
     code += `let ref = ${isGroup ? `db.collectionGroup('${path}')` : `db.collection('${path}')`};\n`;
     code += adminQueryRefStatement(q);
