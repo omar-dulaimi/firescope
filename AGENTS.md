@@ -18,7 +18,7 @@
 ## Style & Organization
 
 - ES modules; Prettier defaults; ESLint config in `eslint.config.js`.
-- File names: kebab-case (`request-processor.js`). Keep modules focused (UI `*-manager.js`, processors `*processor.js`).
+- File names: kebab-case (`query-exporter.js`). Keep modules focused (UI `*-manager.js`, processors `*processor.js`).
 
 ## Testing
 

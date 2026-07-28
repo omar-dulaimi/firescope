@@ -3,7 +3,6 @@
   "version": "1.5.2",
   "description": "A Chrome DevTools extension for monitoring and analyzing Firestore requests",
   "type": "module",
-  "main": "src/js/main.js",
   "scripts": {
     "dev": "vite",
     "build": "pnpm run lint && pnpm run build:free",
