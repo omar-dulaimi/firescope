@@ -70,6 +70,69 @@ chrome.runtime.onConnect.addListener(port => {
 
 // -------- Parsing helpers --------
 
+/**
+ * Flatten a Firestore `structuredQuery.where` tree into the flat filter list the
+ * panel renders and the exporters turn into `where(...)` clauses.
+ *
+ * Every request path must go through this one function. A `where` is only a bare
+ * `fieldFilter` when the query has exactly one clause and that clause has a
+ * comparable value: two or more clauses arrive as a `compositeFilter`, and
+ * `== null` / `== NaN` arrive as a `unaryFilter`. A parser that understands only
+ * `fieldFilter` reports no filters at all, and an export built from that reads the
+ * whole collection. Firestore bills collection reads per document returned, so a
+ * dropped filter is charged to the user.
+ *
+ * Nested composites are flattened, so the branches of an `or(...)` come back as
+ * separate clauses. That loses the disjunction, which the payload has no shape for
+ * yet; it is still strictly better than reporting no filters and exporting an
+ * unfiltered scan.
+ *
+ * A `unaryFilter` without a `fieldPath` is skipped: there is no field name to
+ * build a clause from, and inventing one would emit a query the request never made.
+ */
+function collectFilters(where) {
+  const filters = [];
+  const walk = node => {
+    if (!node) return;
+    if (node.fieldFilter) {
+      filters.push({
+        field: node.fieldFilter.field?.fieldPath,
+        op: node.fieldFilter.op,
+        value: node.fieldFilter.value,
+      });
+      return;
+    }
+    if (node.unaryFilter && node.unaryFilter.field) {
+      filters.push({
+        field: node.unaryFilter.field?.fieldPath,
+        op: node.unaryFilter.op,
+        value: null,
+      });
+      return;
+    }
+    if (node.compositeFilter && Array.isArray(node.compositeFilter.filters)) {
+      node.compositeFilter.filters.forEach(walk);
+    }
+  };
+  walk(where);
+  return filters;
+}
+
+/**
+ * The `limit` of a `structuredQuery`, in either wire form (a bare number, or
+ * `{ value }`), or null when the request carried none.
+ *
+ * An aggregation carries one too, on its inner `structuredQuery`: it caps how much
+ * of the index the server scans, so dropping it is the same class of cost defect as
+ * dropping the limit of a document query.
+ */
+function readLimit(structuredQuery) {
+  const raw = structuredQuery?.limit;
+  if (typeof raw === 'number') return raw;
+  if (raw && typeof raw.value === 'number') return raw.value;
+  return null;
+}
+
 // Parse Listen/channel formData payloads
 function parseFirestoreFromFormData(formData) {
   const results = [];
@@ -134,48 +197,13 @@ function parseFirestoreFromFormData(formData) {
               dir: o.direction,
             }))
           : [];
-        // Limit may be a number or object depending on wire format
-        const limit =
-          typeof sq.limit === 'number'
-            ? sq.limit
-            : sq.limit && typeof sq.limit.value === 'number'
-              ? sq.limit.value
-              : null;
-        const filters = [];
-        const walk = node => {
-          if (!node) return;
-          if (node.fieldFilter) {
-            filters.push({
-              field: node.fieldFilter.field?.fieldPath,
-              op: node.fieldFilter.op,
-              value: node.fieldFilter.value,
-            });
-            return;
-          }
-          if (node.unaryFilter && node.unaryFilter.field) {
-            filters.push({
-              field: node.unaryFilter.field?.fieldPath,
-              op: node.unaryFilter.op,
-              value: null,
-            });
-            return;
-          }
-          if (
-            node.compositeFilter &&
-            Array.isArray(node.compositeFilter.filters)
-          ) {
-            node.compositeFilter.filters.forEach(walk);
-          }
-        };
-        walk(sq.where);
-
         results.push({
           type: 'structured_query',
           collectionPath: from.collectionId || null,
           isCollectionGroup: !!from.allDescendants,
-          filters,
+          filters: collectFilters(sq.where),
           orderBy,
-          limit,
+          limit: readLimit(sq),
         });
         continue;
       }
@@ -186,45 +214,19 @@ function parseFirestoreFromFormData(formData) {
         obj?.structuredAggregationQuery;
       if (agg?.structuredQuery) {
         const from = agg.structuredQuery.from?.[0] || {};
-        const filters = [];
-        const walkAgg = node => {
-          if (!node) return;
-          if (node.fieldFilter) {
-            filters.push({
-              field: node.fieldFilter.field?.fieldPath,
-              op: node.fieldFilter.op,
-              value: node.fieldFilter.value,
-            });
-            return;
-          }
-          if (node.unaryFilter) {
-            filters.push({
-              field: node.unaryFilter.field?.fieldPath,
-              op: node.unaryFilter.op,
-              value: null,
-            });
-            return;
-          }
-          if (
-            node.compositeFilter &&
-            Array.isArray(node.compositeFilter.filters)
-          ) {
-            node.compositeFilter.filters.forEach(walkAgg);
-          }
-        };
-        walkAgg(agg.structuredQuery.where);
 
         results.push({
           type: 'aggregation_query',
           collectionPath: from.collectionId || null,
           isCollectionGroup: !!from.allDescendants,
-          filters,
+          filters: collectFilters(agg.structuredQuery.where),
           orderBy: Array.isArray(agg.structuredQuery.orderBy)
             ? agg.structuredQuery.orderBy.map(o => ({
                 field: o.field?.fieldPath,
                 dir: o.direction,
               }))
             : [],
+          limit: readLimit(agg.structuredQuery),
           aggregations: Array.isArray(agg.aggregations) ? agg.aggregations : [],
         });
         continue;
@@ -263,53 +265,16 @@ function parseFirestoreFromBody(bodyText, url) {
           dir: o.direction,
         }));
       }
-      if (typeof sq.limit === 'number') {
-        data.limit = sq.limit;
-      } else if (sq.limit && typeof sq.limit.value === 'number') {
-        data.limit = sq.limit.value;
-      }
-      if (sq.where && sq.where.fieldFilter) {
-        data.filters.push({
-          field: sq.where.fieldFilter.field?.fieldPath,
-          op: sq.where.fieldFilter.op,
-          value: sq.where.fieldFilter.value,
-        });
-      }
+      data.limit = readLimit(sq);
+      data.filters = collectFilters(sq.where);
     } else if (json && json.structuredAggregationQuery) {
       const agg = json.structuredAggregationQuery;
       data.type = 'aggregation_query';
       const from = agg.structuredQuery?.from?.[0] || {};
       data.collectionPath = from.collectionId || null;
       data.isCollectionGroup = !!from.allDescendants;
-      // parse filters
-      const filters = [];
-      const walkAgg = node => {
-        if (!node) return;
-        if (node.fieldFilter) {
-          filters.push({
-            field: node.fieldFilter.field?.fieldPath,
-            op: node.fieldFilter.op,
-            value: node.fieldFilter.value,
-          });
-          return;
-        }
-        if (node.unaryFilter) {
-          filters.push({
-            field: node.unaryFilter.field?.fieldPath,
-            op: node.unaryFilter.op,
-            value: null,
-          });
-          return;
-        }
-        if (
-          node.compositeFilter &&
-          Array.isArray(node.compositeFilter.filters)
-        ) {
-          node.compositeFilter.filters.forEach(walkAgg);
-        }
-      };
-      walkAgg(agg.structuredQuery?.where);
-      data.filters = filters;
+      data.filters = collectFilters(agg.structuredQuery?.where);
+      data.limit = readLimit(agg.structuredQuery);
       data.orderBy = Array.isArray(agg.structuredQuery?.orderBy)
         ? agg.structuredQuery.orderBy.map(o => ({
             field: o.field?.fieldPath,

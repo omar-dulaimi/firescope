@@ -38,6 +38,7 @@ export default [
         clearTimeout: 'readonly',
         requestAnimationFrame: 'readonly',
         TextDecoder: 'readonly',
+        TextEncoder: 'readonly',
         URLSearchParams: 'readonly',
         Blob: 'readonly',
 
