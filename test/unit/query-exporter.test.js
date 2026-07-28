@@ -395,11 +395,35 @@ const WIRE = {
       orderBy: [{ field: { fieldPath: '__name__' }, direction: 'ASCENDING' }],
     },
   },
+  whereNotNull: {
+    structuredQuery: {
+      from: [{ collectionId: 'orders' }],
+      where: {
+        unaryFilter: { field: { fieldPath: 'deletedAt' }, op: 'IS_NOT_NULL' },
+      },
+      orderBy: [
+        { field: { fieldPath: 'deletedAt' }, direction: 'ASCENDING' },
+        { field: { fieldPath: '__name__' }, direction: 'ASCENDING' },
+      ],
+    },
+  },
   whereNaN: {
     structuredQuery: {
       from: [{ collectionId: 'orders' }],
       where: { unaryFilter: { field: { fieldPath: 'score' }, op: 'IS_NAN' } },
       orderBy: [{ field: { fieldPath: '__name__' }, direction: 'ASCENDING' }],
+    },
+  },
+  whereNotNaN: {
+    structuredQuery: {
+      from: [{ collectionId: 'orders' }],
+      where: {
+        unaryFilter: { field: { fieldPath: 'score' }, op: 'IS_NOT_NAN' },
+      },
+      orderBy: [
+        { field: { fieldPath: 'score' }, direction: 'ASCENDING' },
+        { field: { fieldPath: '__name__' }, direction: 'ASCENDING' },
+      ],
     },
   },
   orFilter: {
@@ -604,6 +628,18 @@ function whereCount(code) {
   return (code.match(/where\(/g) || []).length;
 }
 
+/**
+ * The emitted code without its comment lines. A note explaining that a clause
+ * could not be exported names the call it stands in for, so "no such call was
+ * emitted" has to be asserted against the code rather than the whole snippet.
+ */
+function withoutComments(code) {
+  return code
+    .split('\n')
+    .filter(line => !line.trim().startsWith('//'))
+    .join('\n');
+}
+
 describe('captured filters survive to the export', () => {
   beforeAll(() => {
     // background.js logs every step; keep the test output readable.
@@ -614,7 +650,9 @@ describe('captured filters survive to the export', () => {
     ['twoWheres', WIRE.twoWheres],
     ['threeWheresLimited', WIRE.threeWheresLimited],
     ['whereNull', WIRE.whereNull],
+    ['whereNotNull', WIRE.whereNotNull],
     ['whereNaN', WIRE.whereNaN],
+    ['whereNotNaN', WIRE.whereNotNaN],
     ['orFilter', WIRE.orFilter],
     ['nestedAndOr', WIRE.nestedAndOr],
     ['singleWhere', WIRE.singleWhere],
@@ -730,4 +768,502 @@ describe('captured filters survive to the export', () => {
     expect(row.filters).toEqual([]);
     expect(QueryExporter.toReact(row)).not.toContain('undefined');
   });
+});
+
+// ---------------------------------------------------------------------------
+// Unary operators.
+//
+// `== null` and `== NaN` do not travel as comparisons: Firestore turns them into
+// a unaryFilter carrying IS_NULL / IS_NOT_NULL / IS_NAN / IS_NOT_NAN and no
+// value. Passing that name straight to an exporter produced
+// `where(f, 'IS_NULL', null)`, which no SDK accepts, so the user got an error
+// instead of a query. The Flutter form was worse: `isEqualTo: null` is dropped
+// by cloud_firestore rather than rejected, so the export silently became a
+// whole-collection read.
+//
+// Every spelling asserted below was checked against the SDK that owns it:
+// firebase 10.14.1 for Web/AngularFire, @google-cloud/firestore for Admin, and
+// the cloud_firestore + firebase-android-sdk sources for Flutter.
+// ---------------------------------------------------------------------------
+
+describe('unary filters are translated, not passed through', () => {
+  beforeAll(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  const UNARY_CASES = [
+    ['whereNull', WIRE.whereNull, 'IS_NULL'],
+    ['whereNotNull', WIRE.whereNotNull, 'IS_NOT_NULL'],
+    ['whereNaN', WIRE.whereNaN, 'IS_NAN'],
+    ['whereNotNaN', WIRE.whereNotNaN, 'IS_NOT_NAN'],
+  ];
+
+  for (const [_name, body, op] of UNARY_CASES) {
+    it.each(ALL_TARGETS)(
+      `%s never puts the wire operator ${op} in the exported query`,
+      async target => {
+        const [row] = await captureRows({ body });
+        expect(row.filters[0].op).toBe(op);
+        expect(QueryExporter[target](row)).not.toContain(op);
+      }
+    );
+  }
+
+  it.each([...WEB_TARGETS, ...ADMIN_TARGETS])(
+    '%s compares against null for IS_NULL and IS_NOT_NULL',
+    async target => {
+      const [isNull] = await captureRows({ body: WIRE.whereNull });
+      expect(QueryExporter[target](isNull)).toContain(
+        "where('deletedAt', '==', null)"
+      );
+      const [isNotNull] = await captureRows({ body: WIRE.whereNotNull });
+      expect(QueryExporter[target](isNotNull)).toContain(
+        "where('deletedAt', '!=', null)"
+      );
+    }
+  );
+
+  it.each([...WEB_TARGETS, ...ADMIN_TARGETS])(
+    '%s compares against NaN for IS_NAN and IS_NOT_NAN',
+    async target => {
+      const [isNaN_] = await captureRows({ body: WIRE.whereNaN });
+      const code = QueryExporter[target](isNaN_);
+      expect(code).toContain("where('score', '==', NaN)");
+      // JSON.stringify(NaN) is 'null', which silently compared against null.
+      expect(code).not.toContain("where('score', '==', null)");
+      const [isNotNaN] = await captureRows({ body: WIRE.whereNotNaN });
+      expect(QueryExporter[target](isNotNaN)).toContain(
+        "where('score', '!=', NaN)"
+      );
+    }
+  );
+
+  it('toFlutter uses isNull, because isEqualTo: null is dropped by cloud_firestore', async () => {
+    const [isNull] = await captureRows({ body: WIRE.whereNull });
+    const code = QueryExporter.toFlutter(isNull);
+    expect(code).toContain(".where('deletedAt', isNull: true)");
+    // A null isEqualTo fails the `!= null` guard in Query.where and never
+    // reaches Firestore, which turns this export into an unfiltered scan.
+    expect(code).not.toContain('isEqualTo: null');
+
+    const [isNotNull] = await captureRows({ body: WIRE.whereNotNull });
+    const notNullCode = QueryExporter.toFlutter(isNotNull);
+    expect(notNullCode).toContain(".where('deletedAt', isNull: false)");
+    expect(notNullCode).not.toContain('isNotEqualTo: null');
+  });
+
+  it('toFlutter compares against double.nan for the NaN operators', async () => {
+    const [isNaN_] = await captureRows({ body: WIRE.whereNaN });
+    expect(QueryExporter.toFlutter(isNaN_)).toContain(
+      ".where('score', isEqualTo: double.nan)"
+    );
+    const [isNotNaN] = await captureRows({ body: WIRE.whereNotNaN });
+    expect(QueryExporter.toFlutter(isNotNaN)).toContain(
+      ".where('score', isNotEqualTo: double.nan)"
+    );
+  });
+
+  it.each(ALL_TARGETS)(
+    '%s reports an operator it cannot spell instead of emitting it',
+    target => {
+      const row = {
+        type: 'structured_query',
+        collectionPath: 'orders',
+        filters: [{ field: 'weird', op: 'SOMETHING_NEW', value: null }],
+        orderBy: [],
+      };
+      const code = QueryExporter[target](row);
+      expect(code).not.toContain("'SOMETHING_NEW'");
+      expect(withoutComments(code)).not.toMatch(/where\(/);
+      expect(code).toContain('SOMETHING_NEW filter on weird');
+      expect(code).toContain('reads MORE documents than the app did');
+    }
+  );
+
+  it.each(ALL_TARGETS)('%s still spells ordinary operators', target => {
+    const row = {
+      type: 'structured_query',
+      collectionPath: 'orders',
+      filters: [
+        { field: 'age', op: 'GREATER_THAN', value: { integerValue: '18' } },
+      ],
+      orderBy: [],
+    };
+    expect(QueryExporter[target](row)).toMatch(/where\('age',/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Cursors.
+//
+// startAt/endAt bound the slice of the ordered range a query reads. Nothing
+// captured them, so every export read the whole range instead: the same class of
+// cost defect as the dropped limit, because Firestore bills collection reads per
+// document returned.
+//
+// The four wire shapes below came off the real Web SDK, not from a guess:
+//   startAt(v)    -> startAt: { before: true,  values }
+//   startAfter(v) -> startAt: { before: false, values }
+//   endAt(v)      -> endAt:   { before: false, values }
+//   endBefore(v)  -> endAt:   { before: true,  values }
+// ---------------------------------------------------------------------------
+
+const ORDER_TOTAL_THEN_KEY = [
+  { field: { fieldPath: 'total' }, direction: 'ASCENDING' },
+  { field: { fieldPath: '__name__' }, direction: 'ASCENDING' },
+];
+
+const CURSOR_WIRE = {
+  startAfterAndLimit: {
+    structuredQuery: {
+      from: [{ collectionId: 'orders' }],
+      orderBy: ORDER_TOTAL_THEN_KEY,
+      limit: 20,
+      startAt: { before: false, values: [{ integerValue: '100' }] },
+    },
+  },
+  startAtAndEndBefore: {
+    structuredQuery: {
+      from: [{ collectionId: 'orders' }],
+      orderBy: ORDER_TOTAL_THEN_KEY,
+      startAt: { before: true, values: [{ integerValue: '100' }] },
+      endAt: { before: true, values: [{ integerValue: '500' }] },
+    },
+  },
+  endAtWithoutBefore: {
+    // proto3 JSON omits a false boolean and the Admin SDK really does omit it,
+    // so an absent `before` has to read as endAt(), never as endBefore().
+    structuredQuery: {
+      from: [{ collectionId: 'orders' }],
+      orderBy: ORDER_TOTAL_THEN_KEY,
+      endAt: { values: [{ integerValue: '500' }] },
+    },
+  },
+  paginationCursor: {
+    // What startAfter(lastDocumentSnapshot) puts on the wire: one value per
+    // orderBy clause, ending on the __name__ ordering Firestore appends.
+    structuredQuery: {
+      from: [{ collectionId: 'orders' }],
+      orderBy: ORDER_TOTAL_THEN_KEY,
+      startAt: {
+        before: false,
+        values: [
+          { integerValue: '100' },
+          {
+            referenceValue:
+              'projects/demo-firescope/databases/(default)/documents/orders/abc',
+          },
+        ],
+      },
+    },
+  },
+  groupPaginationCursor: {
+    structuredQuery: {
+      from: [{ collectionId: 'orders', allDescendants: true }],
+      orderBy: ORDER_TOTAL_THEN_KEY,
+      startAt: {
+        before: false,
+        values: [
+          { integerValue: '100' },
+          {
+            referenceValue:
+              'projects/demo-firescope/databases/(default)/documents/users/u1/orders/abc',
+          },
+        ],
+      },
+    },
+  },
+  timestampCursor: {
+    structuredQuery: {
+      from: [{ collectionId: 'orders' }],
+      orderBy: [
+        { field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' },
+        { field: { fieldPath: '__name__' }, direction: 'DESCENDING' },
+      ],
+      startAt: {
+        before: false,
+        values: [{ timestampValue: '2023-11-14T22:13:20.123456000Z' }],
+      },
+    },
+  },
+  unrepresentableCursor: {
+    // A bytes cursor has no literal FireScope can prove in these SDKs.
+    structuredQuery: {
+      from: [{ collectionId: 'orders' }],
+      orderBy: [{ field: { fieldPath: 'blob' }, direction: 'ASCENDING' }],
+      startAt: { before: true, values: [{ bytesValue: 'AQID' }] },
+    },
+  },
+  aggregationWithCursor: {
+    structuredAggregationQuery: {
+      aggregations: [{ alias: 'aggregate_0', count: {} }],
+      structuredQuery: {
+        from: [{ collectionId: 'orders' }],
+        orderBy: ORDER_TOTAL_THEN_KEY,
+        startAt: { before: false, values: [{ integerValue: '100' }] },
+      },
+    },
+  },
+};
+
+describe('a captured cursor is never dropped', () => {
+  beforeAll(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  it('the parser reports both cursors, with before normalised', async () => {
+    const [both] = await captureRows({ body: CURSOR_WIRE.startAtAndEndBefore });
+    expect(both.startAt).toEqual({
+      before: true,
+      values: [{ integerValue: '100' }],
+    });
+    expect(both.endAt).toEqual({
+      before: true,
+      values: [{ integerValue: '500' }],
+    });
+
+    const [omitted] = await captureRows({
+      body: CURSOR_WIRE.endAtWithoutBefore,
+    });
+    expect(omitted.endAt).toEqual({
+      before: false,
+      values: [{ integerValue: '500' }],
+    });
+  });
+
+  it('reports a cursor only when the request carried one', async () => {
+    const [plain] = await captureRows({ body: WIRE.twoWheres });
+    expect(plain.startAt ?? null).toBeNull();
+    expect(plain.endAt ?? null).toBeNull();
+  });
+
+  it('the Listen/channel path agrees with the raw JSON body path', async () => {
+    for (const body of Object.values(CURSOR_WIRE)) {
+      const url = body.structuredAggregationQuery
+        ? `${FS_DOCS}:runAggregationQuery`
+        : `${FS_DOCS}:runQuery`;
+      const [viaJson] = await captureRows({ body, url });
+      const [viaForm] = await captureRows({
+        formData: asListenFormData(body),
+        url: `${FS_DOCS.replace('/documents', '')}/google.firestore.v1.Firestore/Listen/channel`,
+      });
+      expect(viaForm.startAt ?? null).toEqual(viaJson.startAt ?? null);
+      expect(viaForm.endAt ?? null).toEqual(viaJson.endAt ?? null);
+    }
+  });
+
+  it.each(ALL_TARGETS)(
+    '%s exports startAfter() for a startAt cursor with before false',
+    async target => {
+      const [row] = await captureRows({ body: CURSOR_WIRE.startAfterAndLimit });
+      const code = QueryExporter[target](row);
+      expect(code).toMatch(/startAfter\(\[?100\]?\)/);
+      expect(code).not.toMatch(/\bstartAt\(/);
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s exports startAt() and endBefore() when before is true',
+    async target => {
+      const [row] = await captureRows({
+        body: CURSOR_WIRE.startAtAndEndBefore,
+      });
+      const code = QueryExporter[target](row);
+      expect(code).toMatch(/startAt\(\[?100\]?\)/);
+      expect(code).toMatch(/endBefore\(\[?500\]?\)/);
+      expect(code).not.toMatch(/startAfter\(/);
+      expect(code).not.toMatch(/\bendAt\(/);
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s reads an omitted before as endAt(), not endBefore()',
+    async target => {
+      const [row] = await captureRows({ body: CURSOR_WIRE.endAtWithoutBefore });
+      const code = QueryExporter[target](row);
+      expect(code).toMatch(/endAt\(\[?500\]?\)/);
+      expect(code).not.toMatch(/endBefore\(/);
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s keeps the cursor and the limit together',
+    async target => {
+      const [row] = await captureRows({ body: CURSOR_WIRE.startAfterAndLimit });
+      const code = QueryExporter[target](row);
+      expect(code).toMatch(/startAfter\(/);
+      expect(code).toMatch(/limit\(20\)/);
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s imports the cursor helper it calls',
+    async target => {
+      const [row] = await captureRows({
+        body: CURSOR_WIRE.startAtAndEndBefore,
+      });
+      const code = QueryExporter[target](row);
+      expect(code).toMatch(
+        /^import \{[^}]*\bstartAt\b[^}]*\} from '(firebase\/firestore|@angular\/fire\/firestore)';$/m
+      );
+      expect(code).toMatch(
+        /^import \{[^}]*\bendBefore\b[^}]*\} from '(firebase\/firestore|@angular\/fire\/firestore)';$/m
+      );
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s imports every helper the emitted snippet calls',
+    async target => {
+      const [row] = await captureRows({ body: CURSOR_WIRE.timestampCursor });
+      const code = QueryExporter[target](row);
+      const imported = code
+        .match(/^import \{([^}]*)\} from '[^']*';$/m)[1]
+        .split(',')
+        .map(s => s.trim());
+      const body = code
+        .split('\n')
+        .filter(l => !l.startsWith('import ') && !l.startsWith('//'))
+        .join('\n');
+      // Bare `name(` calls only: `.data()` and `.map()` are method calls.
+      const called = new Set(
+        [...body.matchAll(/(?<![.\w$])([A-Za-z_$][\w$]*)\s*\(/g)].map(m => m[1])
+      );
+      for (const name of called) expect(imported).toContain(name);
+    }
+  );
+
+  it.each(WEB_TARGETS)(
+    '%s rebuilds a timestamp cursor exactly, not through a millisecond Date',
+    async target => {
+      const [row] = await captureRows({ body: CURSOR_WIRE.timestampCursor });
+      expect(QueryExporter[target](row)).toContain(
+        'startAfter(new Timestamp(1700000000, 123456000))'
+      );
+    }
+  );
+
+  it.each(ADMIN_TARGETS)(
+    '%s rebuilds a timestamp cursor exactly',
+    async target => {
+      const [row] = await captureRows({ body: CURSOR_WIRE.timestampCursor });
+      expect(QueryExporter[target](row)).toContain(
+        '.startAfter(new admin.firestore.Timestamp(1700000000, 123456000))'
+      );
+    }
+  );
+
+  it('toFlutter rebuilds a timestamp cursor exactly', async () => {
+    const [row] = await captureRows({ body: CURSOR_WIRE.timestampCursor });
+    expect(QueryExporter.toFlutter(row)).toContain(
+      '.startAfter([Timestamp(1700000000, 123456000)])'
+    );
+  });
+
+  it.each(ALL_TARGETS)(
+    '%s spells a __name__ cursor as a document id, which is what the SDKs accept',
+    async target => {
+      const [row] = await captureRows({ body: CURSOR_WIRE.paginationCursor });
+      const code = QueryExporter[target](row);
+      // The Web SDK rejects a DocumentReference at a documentId() ordering and
+      // rejects a path containing a slash for a collection query.
+      expect(code).toContain('"abc"');
+      expect(code).not.toContain('orders/abc');
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s spells a __name__ cursor on a collection group as a full path',
+    async target => {
+      const [row] = await captureRows({
+        body: CURSOR_WIRE.groupPaginationCursor,
+      });
+      expect(QueryExporter[target](row)).toContain('"users/u1/orders/abc"');
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s wraps the cursor values the way the target expects',
+    async target => {
+      const [row] = await captureRows({ body: CURSOR_WIRE.paginationCursor });
+      const code = QueryExporter[target](row);
+      expect(code).toContain(
+        target === 'toFlutter'
+          ? 'startAfter([100, "abc"])'
+          : 'startAfter(100, "abc")'
+      );
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s says the range widened rather than emitting a cursor it cannot spell',
+    async target => {
+      const [row] = await captureRows({
+        body: CURSOR_WIRE.unrepresentableCursor,
+      });
+      const code = QueryExporter[target](row);
+      expect(withoutComments(code)).not.toMatch(/startAt\(/);
+      expect(code).toContain('startAt() cursor whose value has no faithful');
+      expect(code).toContain('WIDER range than the app did');
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    "%s keeps an aggregation's cursor and stays server-side",
+    async target => {
+      const [row] = await captureRows({
+        body: CURSOR_WIRE.aggregationWithCursor,
+        url: `${FS_DOCS}:runAggregationQuery`,
+      });
+      const code = QueryExporter[target](row);
+      expect(code).toMatch(/startAfter\(\[?100\]?\)/);
+      expect(code).not.toMatch(/getDocs\s*\(/);
+      expect(code).not.toMatch(/snap\.docs/);
+    }
+  );
+
+  it.each(ALL_TARGETS)(
+    '%s invents no cursor when none was captured',
+    target => {
+      const code = QueryExporter[target]({
+        type: 'structured_query',
+        collectionPath: 'orders',
+        filters: [],
+        orderBy: [{ field: 'total', direction: 'ASCENDING' }],
+      });
+      for (const fn of ['startAt', 'startAfter', 'endAt', 'endBefore']) {
+        expect(code).not.toContain(`${fn}(`);
+      }
+    }
+  );
+
+  it.each(ALL_TARGETS)('%s ignores a cursor with no values', target => {
+    for (const bad of [{}, { values: [] }, { before: true }, null, 'nope']) {
+      const code = QueryExporter[target]({
+        type: 'structured_query',
+        collectionPath: 'orders',
+        filters: [],
+        orderBy: [{ field: 'total', direction: 'ASCENDING' }],
+        startAt: bad,
+      });
+      expect(code).not.toContain('startAt(');
+      expect(code).not.toContain('startAfter(');
+    }
+  });
+});
+
+describe('a clause with nothing to filter on is never invented', () => {
+  it.each(ALL_TARGETS)(
+    '%s emits no where() for a filter with no field name',
+    target => {
+      const code = QueryExporter[target]({
+        type: 'structured_query',
+        collectionPath: 'orders',
+        filters: [{ op: 'IS_NULL', value: null }],
+        orderBy: [],
+      });
+      expect(code).not.toContain('undefined');
+      expect(withoutComments(code)).not.toMatch(/where\(/);
+    }
+  );
 });

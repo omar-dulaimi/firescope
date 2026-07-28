@@ -374,6 +374,8 @@ function render() {
             filters: q.filters || [],
             orderBy: q.orderBy || [],
             limit: typeof q.limit === 'number' ? q.limit : undefined,
+            startAt: q.startAt || undefined,
+            endAt: q.endAt || undefined,
             aggregations: Array.isArray(q.aggregations)
               ? q.aggregations
               : undefined,
@@ -506,6 +508,8 @@ function render() {
           filters: first.filters || [],
           orderBy: first.orderBy || [],
           limit: typeof first.limit === 'number' ? first.limit : undefined,
+          startAt: first.startAt || undefined,
+          endAt: first.endAt || undefined,
           aggregations: Array.isArray(first.aggregations)
             ? first.aggregations
             : undefined,

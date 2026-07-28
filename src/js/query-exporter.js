@@ -1,17 +1,29 @@
+const SYMBOL_OPS = {
+  EQUAL: '==',
+  NOT_EQUAL: '!=',
+  LESS_THAN: '<',
+  LESS_THAN_OR_EQUAL: '<=',
+  GREATER_THAN: '>',
+  GREATER_THAN_OR_EQUAL: '>=',
+  IN: 'in',
+  NOT_IN: 'not-in',
+  ARRAY_CONTAINS: 'array-contains',
+  ARRAY_CONTAINS_ANY: 'array-contains-any',
+};
+
+const JS_SYMBOL_OPS = new Set(Object.values(SYMBOL_OPS));
+
+/**
+ * The captured comparison operator as the JS SDKs spell it, or null when
+ * FireScope has no spelling for it.
+ *
+ * Returning the wire name unchanged is what produced `where(f, 'IS_NULL', null)`:
+ * a call no SDK accepts. An operator we cannot name is reported, not guessed.
+ */
 function toSymbolOp(op) {
-  const map = {
-    EQUAL: '==',
-    NOT_EQUAL: '!=',
-    LESS_THAN: '<',
-    LESS_THAN_OR_EQUAL: '<=',
-    GREATER_THAN: '>',
-    GREATER_THAN_OR_EQUAL: '>=',
-    IN: 'in',
-    NOT_IN: 'not-in',
-    ARRAY_CONTAINS: 'array-contains',
-    ARRAY_CONTAINS_ANY: 'array-contains-any',
-  };
-  return map[op] || op || '==';
+  if (op === undefined || op === null || op === '') return '==';
+  if (SYMBOL_OPS[op]) return SYMBOL_OPS[op];
+  return JS_SYMBOL_OPS.has(op) ? op : null;
 }
 
 function toFlutterParam(op) {
@@ -27,7 +39,49 @@ function toFlutterParam(op) {
     'array-contains': 'arrayContains',
     'array-contains-any': 'arrayContainsAny',
   };
-  return map[op] || 'isEqualTo';
+  return map[op] || null;
+}
+
+/**
+ * `== null` and `== NaN` never travel as comparisons. Firestore rewrites them
+ * into one of four unary operators, and every SDK spells those differently, so
+ * the wire name has to be translated per target rather than passed through.
+ *
+ * Each spelling below was checked by round-tripping it back through the SDK that
+ * owns it and reading what came out on the wire:
+ *   - Web SDK / AngularFire (firebase 10.14.1): where(f, '==', null) produces
+ *     IS_NULL, where(f, '==', NaN) produces IS_NAN, and the '!=' forms produce
+ *     IS_NOT_NULL / IS_NOT_NAN.
+ *   - Admin SDK: @google-cloud/firestore does the same translation in
+ *     FieldFilterInternal.toProto (isNullChecking/isNanChecking).
+ *   - Flutter: cloud_firestore turns isNull: true/false into '=='/'!=' against
+ *     null, and the native serializer turns '=='/'!=' against NaN into
+ *     IS_NAN / IS_NOT_NAN.
+ *
+ * Flutter must use `isNull:` rather than `isEqualTo: null`, because
+ * cloud_firestore only applies `isEqualTo` when it is non-null: passing null
+ * drops the clause silently, which turns the export into a whole-collection read
+ * instead of an error.
+ */
+const UNARY_FILTERS = {
+  IS_NULL: { js: "'==', null", dart: 'isNull: true' },
+  IS_NOT_NULL: { js: "'!=', null", dart: 'isNull: false' },
+  IS_NAN: { js: "'==', NaN", dart: 'isEqualTo: double.nan' },
+  IS_NOT_NAN: { js: "'!=', NaN", dart: 'isNotEqualTo: double.nan' },
+};
+
+/**
+ * A captured clause we cannot spell for this target is left out of the export,
+ * which makes the exported query read a wider slice than the app did. Say so:
+ * silently emitting fewer filters is exactly how an export turns into a bill.
+ */
+function droppedFilterNote(f) {
+  const field = f?.field == null ? '(unnamed field)' : String(f.field);
+  const op = f?.op == null ? '(unknown operator)' : String(f.op);
+  return (
+    `// FireScope captured a ${op} filter on ${field} that this SDK has no spelling for.\n` +
+    `// It is left out, so this query reads MORE documents than the app did.\n`
+  );
 }
 
 function normalizeValue(v) {
@@ -59,7 +113,10 @@ function normalizeValue(v) {
 
 function dartify(value) {
   // Basic JSON -> Dart literal; booleans/numbers fine; strings quoted; arrays/maps JSON-like are acceptable for examples
-  return JSON.stringify(value);
+  const json = JSON.stringify(value);
+  // A double-quoted Dart string interpolates `$`, so an unescaped one either
+  // fails to compile or silently substitutes something else.
+  return json === undefined ? undefined : json.replace(/\$/g, '\\$');
 }
 
 const IDENT_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
@@ -195,21 +252,367 @@ function limitNote(count) {
   return `// Captured limit: this query reads at most ${count} document${count === 1 ? '' : 's'}.\n`;
 }
 
+// ---------------------------------------------------------------------------
+// Cursors
+//
+// A `startAt` / `endAt` cursor bounds the slice of the ordered range a query
+// reads. Losing one widens the read to the whole range, which Firestore bills
+// per document returned, so a dropped cursor costs the user the same way a
+// dropped `limit` does.
+//
+// The four wire shapes below were read off the real Firebase Web SDK
+// (firebase 10.14.1) rather than guessed:
+//   startAt(v)     -> startAt: { before: true,  values: [...] }
+//   startAfter(v)  -> startAt: { before: false, values: [...] }
+//   endAt(v)       -> endAt:   { before: false, values: [...] }
+//   endBefore(v)   -> endAt:   { before: true,  values: [...] }
+// `before` is proto3 JSON, so false is allowed to be omitted entirely and the
+// Admin SDK really does omit it. Absent therefore has to read as false.
+// ---------------------------------------------------------------------------
+
+const CURSOR_SIDES = [
+  ['startAt', 'startAt', 'startAfter'],
+  ['endAt', 'endBefore', 'endAt'],
+];
+
+const TIMESTAMP_RE = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z$/;
+
+const DOCUMENTS_MARKER = '/documents/';
+
 /**
- * Web SDK (modular) filter/orderBy/limit lines, operating on a `qRef` variable.
+ * A `timestampValue`, as whole seconds plus nanoseconds.
+ *
+ * Firestore emits nanosecond precision and a JS `Date` only carries
+ * milliseconds, so the export builds a Timestamp from the two integers instead
+ * of parsing the string: a cursor rounded to the nearest millisecond is a
+ * different boundary than the one the app used.
  */
-function webQueryLines(q) {
+function decodeTimestamp(value) {
+  if (value && typeof value === 'object') {
+    const seconds = Number(value.seconds ?? 0);
+    const nanos = Number(value.nanos ?? value.nanoseconds ?? 0);
+    if (!Number.isSafeInteger(seconds) || !Number.isSafeInteger(nanos)) {
+      return null;
+    }
+    return { kind: 'timestamp', seconds, nanos };
+  }
+  const m = TIMESTAMP_RE.exec(String(value));
+  if (!m) return null;
+  const ms = Date.parse(`${m[1]}Z`);
+  if (!Number.isFinite(ms)) return null;
+  return {
+    kind: 'timestamp',
+    seconds: ms / 1000,
+    nanos: m[2] ? Number(m[2].padEnd(9, '0')) : 0,
+  };
+}
+
+/**
+ * A `referenceValue` reduced to the document path an export can rebuild locally.
+ * The wire value names the project and database the capture came from; the
+ * exported snippet has to resolve against whichever database it is run with.
+ */
+function decodeReference(value) {
+  const raw = String(value);
+  const at = raw.indexOf(DOCUMENTS_MARKER);
+  let path = at === -1 ? raw : raw.slice(at + DOCUMENTS_MARKER.length);
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    // Already decoded, or not valid percent-encoding: use it as it arrived.
+  }
+  const segments = path.split('/').filter(Boolean);
+  if (!segments.length || segments.length % 2 !== 0) return null;
+  return { kind: 'reference', path: segments.join('/') };
+}
+
+/**
+ * Split one wire cursor value into something each target can render in its own
+ * spelling, or null when there is no faithful literal for it.
+ *
+ * Null is not a failure to be papered over: an approximated cursor points at a
+ * different document than the app's did, so the honest options are the exact
+ * value or a note saying the bound was lost.
+ */
+function decodeCursorValue(v) {
+  if (typeof v !== 'object' || v === null) return null;
+  const valueType = Object.keys(v)[0];
+  if (!valueType) return null;
+  const value = v[valueType];
+  switch (valueType) {
+    case 'stringValue':
+      return { kind: 'literal', value: String(value) };
+    case 'booleanValue':
+      return { kind: 'literal', value: !!value };
+    case 'nullValue':
+      return { kind: 'literal', value: null };
+    case 'integerValue': {
+      const n = Number(value);
+      // Firestore integers are 64-bit. Past 2^53 no JS or Dart number literal
+      // names the same integer, so the bound cannot be reproduced.
+      return Number.isSafeInteger(n) ? { kind: 'literal', value: n } : null;
+    }
+    case 'doubleValue': {
+      if (value === 'NaN') return { kind: 'nan' };
+      if (value === 'Infinity') return { kind: 'infinity' };
+      if (value === '-Infinity') return { kind: 'negativeInfinity' };
+      const n = Number(value);
+      return Number.isFinite(n) ? { kind: 'literal', value: n } : null;
+    }
+    case 'timestampValue':
+      return decodeTimestamp(value);
+    case 'geoPointValue': {
+      const latitude = Number(value?.latitude ?? 0);
+      const longitude = Number(value?.longitude ?? 0);
+      return Number.isFinite(latitude) && Number.isFinite(longitude)
+        ? { kind: 'geoPoint', latitude, longitude }
+        : null;
+    }
+    case 'referenceValue':
+      return decodeReference(value);
+    case 'arrayValue': {
+      const raw = Array.isArray(value?.values) ? value.values : [];
+      const items = raw.map(decodeCursorValue);
+      return items.some(i => i === null) ? null : { kind: 'array', items };
+    }
+    case 'mapValue': {
+      const fields = value?.fields;
+      if (fields != null && typeof fields !== 'object') return null;
+      const entries = Object.entries(fields || {}).map(([k, val]) => [
+        k,
+        decodeCursorValue(val),
+      ]);
+      return entries.some(([, val]) => val === null)
+        ? null
+        : { kind: 'map', entries };
+    }
+    default:
+      // bytesValue, and whatever Firestore adds next: no literal we can prove.
+      return null;
+  }
+}
+
+const KEY_FIELD = '__name__';
+
+/**
+ * Firestore appends `__name__` to a query's ordering, so the last value of a
+ * `startAfter(lastDocument)` cursor lands on the key field. Every SDK treats a
+ * cursor value in that position as a document id rather than as a field value:
+ * the Web SDK rejects a DocumentReference there outright and wants the plain
+ * document id for a collection query, or the whole document path for a
+ * collection-group query.
+ *
+ * Checked by running both spellings through firebase 10.14.1: 'abc' is accepted
+ * for a collection and rejected for a group, 'orders/abc' the other way round,
+ * and a DocumentReference is rejected for both.
+ */
+function asDocumentIdCursor(decoded, isGroup) {
+  if (!decoded || decoded.kind !== 'reference') return decoded;
+  const segments = decoded.path.split('/');
+  return {
+    kind: 'literal',
+    value: isGroup ? decoded.path : segments[segments.length - 1],
+  };
+}
+
+/**
+ * The cursors a captured query carried, each already resolved to the SDK call it
+ * maps to. Cursor values are positional: value `i` belongs to `orderBy[i]`.
+ *
+ * `values` is null when at least one of the cursor's values has no faithful
+ * literal for any target: a cursor is all of its values or none of them, because
+ * a partial cursor points somewhere the app never pointed.
+ */
+function getCursors(q) {
+  const orderBy = Array.isArray(q?.orderBy) ? q.orderBy : [];
+  const isGroup = !!q?.isCollectionGroup;
+  const out = [];
+  for (const [key, whenBefore, whenAfter] of CURSOR_SIDES) {
+    const raw = q?.[key];
+    const values = Array.isArray(raw?.values) ? raw.values : null;
+    if (!values || !values.length) continue;
+    const decoded = values.map((v, i) => {
+      const value = decodeCursorValue(v);
+      return orderBy[i]?.field === KEY_FIELD
+        ? asDocumentIdCursor(value, isGroup)
+        : value;
+    });
+    out.push({
+      fn: raw.before === true ? whenBefore : whenAfter,
+      values: decoded.some(d => d === null) ? null : decoded,
+    });
+  }
+  return out;
+}
+
+function renderCursorValue(decoded, dialect) {
+  switch (decoded.kind) {
+    case 'nan':
+      return dialect.nan;
+    case 'infinity':
+      return dialect.infinity;
+    case 'negativeInfinity':
+      return dialect.negativeInfinity;
+    case 'timestamp':
+      return dialect.timestamp(decoded.seconds, decoded.nanos);
+    case 'geoPoint':
+      return dialect.geoPoint(decoded.latitude, decoded.longitude);
+    case 'reference':
+      return dialect.reference(decoded.path);
+    case 'array':
+      return `[${decoded.items.map(i => renderCursorValue(i, dialect)).join(', ')}]`;
+    case 'map':
+      return `{ ${decoded.entries
+        .map(
+          ([k, val]) => `${dialect.key(k)}: ${renderCursorValue(val, dialect)}`
+        )
+        .join(', ')} }`;
+    default:
+      return dialect.literal(decoded.value);
+  }
+}
+
+function webDialect(dbVar) {
+  return {
+    literal: JSON.stringify,
+    nan: 'NaN',
+    infinity: 'Infinity',
+    negativeInfinity: '-Infinity',
+    timestamp: (seconds, nanos) => `new Timestamp(${seconds}, ${nanos})`,
+    geoPoint: (lat, lng) => `new GeoPoint(${lat}, ${lng})`,
+    reference: path => `doc(${dbVar}, ${sq(path)})`,
+    key: objKey,
+  };
+}
+
+const ADMIN_DIALECT = {
+  literal: JSON.stringify,
+  nan: 'NaN',
+  infinity: 'Infinity',
+  negativeInfinity: '-Infinity',
+  timestamp: (seconds, nanos) =>
+    `new admin.firestore.Timestamp(${seconds}, ${nanos})`,
+  geoPoint: (lat, lng) => `new admin.firestore.GeoPoint(${lat}, ${lng})`,
+  reference: path => `db.doc(${sq(path)})`,
+  key: objKey,
+};
+
+const FLUTTER_DIALECT = {
+  literal: dartify,
+  nan: 'double.nan',
+  infinity: 'double.infinity',
+  negativeInfinity: '-double.infinity',
+  timestamp: (seconds, nanos) => `Timestamp(${seconds}, ${nanos})`,
+  geoPoint: (lat, lng) => `GeoPoint(${lat}, ${lng})`,
+  reference: path => `FirebaseFirestore.instance.doc(${sq(path)})`,
+  key: sq,
+};
+
+const CURSOR_NOTE =
+  '// Captured cursor: keeps this query to the slice of the ordered range the app read.\n';
+
+/**
+ * A cursor we cannot spell here is left out, and leaving it out widens the read
+ * back to the whole ordered range. Say which bound was lost and what it costs.
+ */
+function droppedCursorNote(fn) {
+  return (
+    `// FireScope captured a ${fn}() cursor whose value has no faithful literal here.\n` +
+    `// It is left out, so this query reads a WIDER range than the app did.\n`
+  );
+}
+
+/**
+ * The cursor calls for one target: rendered arguments for every cursor we can
+ * express, and a note for every one we cannot.
+ */
+function cursorCalls(q, dialect, joinArgs) {
+  let notes = '';
+  const calls = [];
+  for (const cursor of getCursors(q)) {
+    if (!cursor.values) {
+      notes += droppedCursorNote(cursor.fn);
+      continue;
+    }
+    calls.push({
+      fn: cursor.fn,
+      args: joinArgs(cursor.values.map(v => renderCursorValue(v, dialect))),
+    });
+  }
+  return { notes, calls };
+}
+
+const joinJsArgs = parts => parts.join(', ');
+const joinDartArgs = parts => `[${parts.join(', ')}]`;
+
+/**
+ * A clause with no field name cannot be exported: there is nothing to filter on,
+ * and emitting `where('undefined', ...)` would query a field the app never used.
+ */
+function hasField(f) {
+  return f?.field != null && String(f.field) !== '';
+}
+
+/**
+ * The `where(...)` arguments for one captured clause in JS SDK spelling (the Web
+ * and Admin SDKs agree on the operator set), or null when it cannot be spelled.
+ */
+function jsWhereArgs(f) {
+  if (!hasField(f)) return null;
+  const unary = UNARY_FILTERS[f?.op];
+  if (unary) return `${sq(f.field)}, ${unary.js}`;
+  const op = toSymbolOp(f?.op);
+  if (op === null) return null;
+  const json = JSON.stringify(normalizeValue(f?.value));
+  if (json === undefined) return null;
+  return `${sq(f.field)}, '${op}', ${json}`;
+}
+
+/**
+ * The `where(...)` arguments for one captured clause in Flutter spelling, or
+ * null when it cannot be spelled.
+ */
+function flutterWhereArgs(f) {
+  if (!hasField(f)) return null;
+  const unary = UNARY_FILTERS[f?.op];
+  if (unary) return `${sq(f.field)}, ${unary.dart}`;
+  const op = toSymbolOp(f?.op);
+  const param = op === null ? null : toFlutterParam(op);
+  if (!param) return null;
+  const val = dartify(normalizeValue(f?.value));
+  if (val === undefined) return null;
+  return `${sq(f.field)}, ${param}: ${val}`;
+}
+
+function webDirection(o) {
+  return (o.direction || o.dir || '').toLowerCase().startsWith('desc')
+    ? "'desc'"
+    : "'asc'";
+}
+
+/**
+ * Web SDK (modular) filter/orderBy/cursor/limit lines, operating on a `qRef`
+ * variable. `dbVar` names the Firestore instance, which document-reference
+ * cursor values need in order to rebuild their `doc(...)` reference.
+ */
+function webQueryLines(q, dbVar) {
   let code = '';
   (q.filters || []).forEach(f => {
-    const op = toSymbolOp(f.op);
-    const val = normalizeValue(f.value);
-    code += `qRef = query(qRef, where('${f.field}', '${op}', ${JSON.stringify(val)}));\n`;
+    const args = jsWhereArgs(f);
+    if (args === null) {
+      code += droppedFilterNote(f);
+      return;
+    }
+    code += `qRef = query(qRef, where(${args}));\n`;
   });
   (q.orderBy || []).forEach(o => {
-    const dir = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
-      ? "'desc'"
-      : "'asc'";
-    code += `qRef = query(qRef, orderBy('${o.field}', ${dir}));\n`;
+    code += `qRef = query(qRef, orderBy(${sq(o.field)}, ${webDirection(o)}));\n`;
+  });
+  const { notes, calls } = cursorCalls(q, webDialect(dbVar), joinJsArgs);
+  code += notes;
+  if (calls.length) code += CURSOR_NOTE;
+  calls.forEach(c => {
+    code += `qRef = query(qRef, ${c.fn}(${c.args}));\n`;
   });
   const count = getLimit(q);
   if (count !== null) {
@@ -220,60 +623,108 @@ function webQueryLines(q) {
 }
 
 /**
- * The Web SDK helpers a query needs beyond the collection accessor. `limit` is
- * only imported when the request actually carried one.
+ * The Web SDK helpers a cursor value needs importing beyond the cursor function
+ * itself: a Timestamp, GeoPoint or document reference is a constructor call.
+ */
+function cursorValueImports(decoded, acc) {
+  if (!decoded) return acc;
+  switch (decoded.kind) {
+    case 'timestamp':
+      acc.add('Timestamp');
+      break;
+    case 'geoPoint':
+      acc.add('GeoPoint');
+      break;
+    case 'reference':
+      acc.add('doc');
+      break;
+    case 'array':
+      decoded.items.forEach(i => cursorValueImports(i, acc));
+      break;
+    case 'map':
+      decoded.entries.forEach(([, val]) => cursorValueImports(val, acc));
+      break;
+    default:
+      break;
+  }
+  return acc;
+}
+
+/**
+ * The Web SDK helpers a query needs beyond the collection accessor. `limit` and
+ * the cursor helpers are only imported when the request actually carried them,
+ * and every helper the emitted lines call must be in here or the snippet will
+ * not run.
  */
 function webQueryImports(q) {
+  const cursors = new Set();
+  for (const cursor of getCursors(q)) {
+    if (!cursor.values) continue;
+    cursors.add(cursor.fn);
+    cursor.values.forEach(v => cursorValueImports(v, cursors));
+  }
   return [
     'query',
     'where',
     'orderBy',
     ...(getLimit(q) === null ? [] : ['limit']),
+    ...cursors,
   ];
 }
 
 /**
- * Admin SDK filter/orderBy/limit chain segments.
+ * Admin SDK filter/orderBy/cursor/limit chain segments, plus any notes that have
+ * to precede the statement because a chain cannot carry a comment.
  */
 function adminQueryChain(q) {
   const chain = [];
+  let notes = '';
   (q.filters || []).forEach(f => {
-    const op = toSymbolOp(f.op);
-    const val = normalizeValue(f.value);
-    chain.push(`.where('${f.field}', '${op}', ${JSON.stringify(val)})`);
+    const args = jsWhereArgs(f);
+    if (args === null) {
+      notes += droppedFilterNote(f);
+      return;
+    }
+    chain.push(`.where(${args})`);
   });
   (q.orderBy || []).forEach(o => {
-    const dir = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
-      ? "'desc'"
-      : "'asc'";
-    chain.push(`.orderBy('${o.field}', ${dir})`);
+    chain.push(`.orderBy(${sq(o.field)}, ${webDirection(o)})`);
   });
+  const cursors = cursorCalls(q, ADMIN_DIALECT, joinJsArgs);
+  notes += cursors.notes;
+  if (cursors.calls.length) notes += CURSOR_NOTE;
+  cursors.calls.forEach(c => chain.push(`.${c.fn}(${c.args})`));
   const count = getLimit(q);
   if (count !== null) chain.push(`.limit(${count})`);
-  return chain;
+  return { chain, notes };
 }
 
 /**
  * The whole `const queryRef = ...` statement for the Admin SDK, so that every
- * Admin target builds the chain, limit included, from one place.
+ * Admin target builds the chain, limit and cursors included, from one place.
  */
 function adminQueryRefStatement(q) {
-  const chain = adminQueryChain(q);
+  const { chain, notes } = adminQueryChain(q);
   const count = getLimit(q);
-  let code = count === null ? '' : limitNote(count);
+  let code = notes;
+  code += count === null ? '' : limitNote(count);
   code += `const queryRef = ref${chain.length ? '\n  ' + chain.join('\n  ') : ''};\n`;
   return code;
 }
 
 /**
- * Flutter filter/orderBy/limit chain segments.
+ * Flutter filter/orderBy/cursor/limit chain segments, plus any preceding notes.
  */
 function flutterQueryChain(q) {
   const chain = [];
+  let notes = '';
   (q.filters || []).forEach(f => {
-    const param = toFlutterParam(toSymbolOp(f.op));
-    const val = normalizeValue(f.value);
-    chain.push(`.where(${sq(f.field)}, ${param}: ${dartify(val)})`);
+    const args = flutterWhereArgs(f);
+    if (args === null) {
+      notes += droppedFilterNote(f);
+      return;
+    }
+    chain.push(`.where(${args})`);
   });
   (q.orderBy || []).forEach(o => {
     const desc = (o.direction || o.dir || '').toLowerCase().startsWith('desc')
@@ -281,18 +732,23 @@ function flutterQueryChain(q) {
       : 'false';
     chain.push(`.orderBy(${sq(o.field)}, descending: ${desc})`);
   });
+  const cursors = cursorCalls(q, FLUTTER_DIALECT, joinDartArgs);
+  notes += cursors.notes;
+  if (cursors.calls.length) notes += CURSOR_NOTE;
+  cursors.calls.forEach(c => chain.push(`.${c.fn}(${c.args})`));
   const count = getLimit(q);
   if (count !== null) chain.push(`.limit(${count})`);
-  return chain;
+  return { chain, notes };
 }
 
 /**
  * The whole `var queryRef = ...` statement for Flutter.
  */
 function flutterQueryRefStatement(q) {
-  const chain = flutterQueryChain(q);
+  const { chain, notes } = flutterQueryChain(q);
   const count = getLimit(q);
-  let code = count === null ? '' : limitNote(count);
+  let code = notes;
+  code += count === null ? '' : limitNote(count);
   code += `var queryRef = ref${chain.length ? '\n  ' + chain.join('\n  ') : ''};\n`;
   return code;
 }
@@ -345,7 +801,7 @@ function webAggregationExport(
   }
   code += `const ref = ${isGroup ? `collectionGroup(${dbVar}, '${path}')` : `collection(${dbVar}, '${path}')`};\n`;
   code += `let qRef = ref;\n`;
-  code += webQueryLines(q);
+  code += webQueryLines(q, dbVar);
   code += `// Server-side aggregation: billed per index entry scanned, not per document.\n`;
   code += `const snap = await getAggregateFromServer(qRef, ${webAggregateSpec(aggregations)});\n`;
   code += `console.log(snap.data());`;
@@ -458,7 +914,7 @@ export const QueryExporter = {
     code += `import { ${imports} } from '@angular/fire/firestore';\n\n`;
     code += `const ref = ${isGroup ? `collectionGroup(firestore, '${path}')` : `collection(firestore, '${path}')`};\n`;
     code += `let qRef = ref;\n`;
-    code += webQueryLines(q);
+    code += webQueryLines(q, 'firestore');
     code += `const snap = await getDocs(qRef);\nconsole.log(snap.docs.map(d=>({ id: d.id, ...d.data() })));`;
     return code;
   },
@@ -491,7 +947,7 @@ export const QueryExporter = {
     code += `// Assumes you have a Firestore instance: const db = ...\n`;
     code += `const ref = ${isGroup ? `collectionGroup(db, '${path}')` : `collection(db, '${path}')`};\n`;
     code += `let qRef = ref;\n`;
-    code += webQueryLines(q);
+    code += webQueryLines(q, 'db');
     code += `const snap = await getDocs(qRef);\nconsole.log(snap.docs.map(d=>({ id: d.id, ...d.data() })));`;
     return code;
   },
@@ -524,7 +980,7 @@ export const QueryExporter = {
     code += `// Assumes you have a Firestore instance: const db = ...\n`;
     code += `const ref = ${isGroup ? `collectionGroup(db, '${path}')` : `collection(db, '${path}')`};\n`;
     code += `let qRef = ref;\n`;
-    code += webQueryLines(q);
+    code += webQueryLines(q, 'db');
     code += `const snap = await getDocs(qRef);\nconsole.log(snap.docs.map(d=>({ id: d.id, ...d.data() })));`;
     return code;
   },

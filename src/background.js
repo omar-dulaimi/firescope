@@ -133,6 +133,29 @@ function readLimit(structuredQuery) {
   return null;
 }
 
+/**
+ * A `startAt` / `endAt` cursor of a `structuredQuery`, or null when the request
+ * carried none.
+ *
+ * A cursor bounds the slice of the ordered range the query reads. Dropping it
+ * widens that read back to the whole range, and Firestore bills collection reads
+ * per document returned, so a lost cursor costs the user the same way a lost
+ * `limit` does. It has to be captured here, because a value that never reaches
+ * the panel cannot be exported.
+ *
+ * `before` is proto3 JSON, which is allowed to omit a false boolean, and the
+ * Admin SDK really does omit it. Absent therefore means false, not unknown --
+ * and false is what distinguishes startAfter() from startAt().
+ *
+ * The values are kept in their wire form, exactly as filter values are, so that
+ * each export target can render them in its own spelling.
+ */
+function readCursor(cursor) {
+  const values = Array.isArray(cursor?.values) ? cursor.values : null;
+  if (!values || values.length === 0) return null;
+  return { before: cursor.before === true, values };
+}
+
 // Parse Listen/channel formData payloads
 function parseFirestoreFromFormData(formData) {
   const results = [];
@@ -204,6 +227,8 @@ function parseFirestoreFromFormData(formData) {
           filters: collectFilters(sq.where),
           orderBy,
           limit: readLimit(sq),
+          startAt: readCursor(sq.startAt),
+          endAt: readCursor(sq.endAt),
         });
         continue;
       }
@@ -227,6 +252,8 @@ function parseFirestoreFromFormData(formData) {
               }))
             : [],
           limit: readLimit(agg.structuredQuery),
+          startAt: readCursor(agg.structuredQuery.startAt),
+          endAt: readCursor(agg.structuredQuery.endAt),
           aggregations: Array.isArray(agg.aggregations) ? agg.aggregations : [],
         });
         continue;
@@ -266,6 +293,8 @@ function parseFirestoreFromBody(bodyText, url) {
         }));
       }
       data.limit = readLimit(sq);
+      data.startAt = readCursor(sq.startAt);
+      data.endAt = readCursor(sq.endAt);
       data.filters = collectFilters(sq.where);
     } else if (json && json.structuredAggregationQuery) {
       const agg = json.structuredAggregationQuery;
@@ -275,6 +304,8 @@ function parseFirestoreFromBody(bodyText, url) {
       data.isCollectionGroup = !!from.allDescendants;
       data.filters = collectFilters(agg.structuredQuery?.where);
       data.limit = readLimit(agg.structuredQuery);
+      data.startAt = readCursor(agg.structuredQuery?.startAt);
+      data.endAt = readCursor(agg.structuredQuery?.endAt);
       data.orderBy = Array.isArray(agg.structuredQuery?.orderBy)
         ? agg.structuredQuery.orderBy.map(o => ({
             field: o.field?.fieldPath,
